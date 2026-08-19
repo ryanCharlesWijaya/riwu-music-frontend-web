@@ -1,36 +1,57 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# riwu-music-frontend-web
 
-## Getting Started
+Next.js web player and administrative control center for the **riwu-music** platform. Dark-themed streaming UI with search, playlists, play history, async download queue, and RBAC-protected admin dashboard.
 
-First, run the development server:
+## Features
+
+- **Stream Player** — Search and play tracks from YouTube, Google Drive, and local modules
+- **Admin Panel** — Toggle media source modules, view system stats, manage user roles (admin only)
+- **Hidden Registration** — `/register` route for user and admin account creation
+- **Download Queue** — Monitor background download worker tasks
+- **Playlists & History** — Authenticated users can save playlists and view play history
+
+## Quick Start
 
 ```bash
+# Install dependencies
+npm install
+
+# Start dev server (port 3000)
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Make sure the [riwu-music-backend](../riwu-music-backend) is running on `http://localhost:8080`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+Create a `.env.local` file:
 
-## Learn More
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8080/api
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Pages & Routes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Route       | Description                              |
+|-------------|------------------------------------------|
+| `/`         | Main stream player with search           |
+| `/register` | Hidden registration (user or admin role) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+## Default Login
 
-## Deploy on Vercel
+Use the backend default accounts or register via `/register`:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Admin:** `admin@riwu.com` / `admin123`
+- **User:** `user@riwu.com` / `user123`
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Tech Stack
+
+- Next.js 13 (App Router)
+- TypeScript
+- Tailwind CSS
+- Lucide React icons
+
+## Related Repos
+
+- [riwu-music-backend](../riwu-music-backend) — Go core server
+- [riwu-music-frontend-mobile](../riwu-music-frontend-mobile) — Flutter mobile app
