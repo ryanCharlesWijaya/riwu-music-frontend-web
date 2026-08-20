@@ -22,6 +22,7 @@ interface PlayerBarProps {
   currentTrack: MediaItem | null;
   isPlaying: boolean;
   queueCount: number;
+  nextTrackIds?: string[];
   canSkipPrev: boolean;
   canSkipNext: boolean;
   autoPlay: boolean;
@@ -39,6 +40,7 @@ export default function PlayerBar({
   currentTrack,
   isPlaying,
   queueCount,
+  nextTrackIds = [],
   canSkipPrev,
   canSkipNext,
   autoPlay,
@@ -84,12 +86,12 @@ export default function PlayerBar({
         } else if (!navigator.onLine) {
           return;
         } else {
-          void prefetchTracks([trackId]);
-          await waitForStreamReady(trackId, 2000);
+          void prefetchTracks([trackId], { priority: true });
+          await waitForStreamReady(trackId, 3500, { preferHead: true });
         }
       } else if (trackId.startsWith('yt_')) {
-        void prefetchTracks([trackId]);
-        await waitForStreamReady(trackId, 2000);
+        void prefetchTracks([trackId], { priority: true });
+        await waitForStreamReady(trackId, 3500, { preferHead: true });
       }
 
       if (cancelled || !audioRef.current) return;
@@ -105,6 +107,23 @@ export default function PlayerBar({
       cancelled = true;
     };
   }, [currentTrack?.id]);
+
+  // While current song plays, resolve + head-buffer the next queued tracks.
+  const nextWarmKey = nextTrackIds.join('|');
+  useEffect(() => {
+    if (!nextTrackIds.length) return;
+    let cancelled = false;
+    void prefetchTracks(nextTrackIds, { priority: true });
+    const immediateNext = nextTrackIds[0];
+    if (immediateNext) {
+      void waitForStreamReady(immediateNext, 12000, { preferHead: true }).then(() => {
+        // Head ready for instant skip / auto-advance.
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [currentTrack?.id, nextWarmKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!audioRef.current) return;

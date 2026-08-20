@@ -287,6 +287,11 @@ export default function Home() {
       const data = await fetchWithAuth('/history', token);
       const items = Array.isArray(data) ? (data as PlayHistory[]) : [];
       setHistory(items);
+      // Precache ~10s heads for the latest listened YouTube tracks.
+      void prefetchTracks(
+        items.slice(0, 10).map((h) => h.track_id),
+        { priority: true },
+      );
       return items;
     } catch (err) {
       console.error('Failed to load history:', err);
@@ -304,7 +309,12 @@ export default function Home() {
       const list = Array.isArray(data) ? data : [];
       setDownloads(list);
       cacheDownloads(list);
-      // Keep offline IndexedDB titles in sync with real YouTube names.
+      // Precache stream heads for newest completed downloads (online replay path).
+      const latest = list
+        .filter((t) => t.status === 'completed' && t.track_id.startsWith('yt_'))
+        .slice(0, 10)
+        .map((t) => t.track_id);
+      void prefetchTracks(latest, { priority: true });
       for (const task of list) {
         if (
           task.status === 'completed' &&
@@ -438,11 +448,27 @@ export default function Home() {
   useEffect(() => {
     if (currentTrack && isPlaying) {
       void recordHistory(currentTrack);
-      void prefetchTracks(
-        queueState.tracks.slice(queueState.index, queueState.index + 3).map((t) => t.id)
-      );
     }
-  }, [currentTrack?.id, isPlaying, recordHistory, queueState.tracks, queueState.index]);
+  }, [currentTrack?.id, isPlaying, recordHistory]);
+
+  // Resolve + buffer ~10s head for the next queued songs while this one plays.
+  useEffect(() => {
+    const upcoming = queueState.tracks
+      .slice(queueState.index + 1, queueState.index + 3)
+      .map((t) => t.id)
+      .filter((id) => id.startsWith('yt_'));
+    if (upcoming.length === 0) return;
+    void prefetchTracks(upcoming, { priority: true });
+  }, [queueState.index, queueState.tracks]);
+
+  const nextTrackIds = useMemo(
+    () =>
+      queueState.tracks
+        .slice(queueState.index + 1, queueState.index + 3)
+        .map((t) => t.id)
+        .filter((id) => id.startsWith('yt_')),
+    [queueState.index, queueState.tracks],
+  );
 
   const handlePlay = (track: MediaItem) => {
     if (currentTrack?.id === track.id) {
@@ -1048,6 +1074,7 @@ export default function Home() {
         currentTrack={currentTrack}
         isPlaying={isPlaying}
         queueCount={queueState.tracks.length}
+        nextTrackIds={nextTrackIds}
         canSkipPrev={canSkipPrev}
         canSkipNext={canSkipNext || autoPlay}
         autoPlay={autoPlay}

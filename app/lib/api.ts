@@ -92,14 +92,14 @@ export interface SystemStats {
   pending_tasks: number;
 }
 
-export async function prefetchTracks(ids: string[]) {
-  const trackIds = ids.filter((id) => id.startsWith('yt_')).slice(0, 8);
+export async function prefetchTracks(ids: string[], options?: { priority?: boolean }) {
+  const trackIds = ids.filter((id) => id.startsWith('yt_')).slice(0, 12);
   if (trackIds.length === 0) return;
   try {
     await fetch(`${API_BASE}/media/prefetch`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: trackIds }),
+      body: JSON.stringify({ ids: trackIds, priority: options?.priority ?? true }),
     });
   } catch {
     // Prefetch is best-effort.
@@ -121,19 +121,25 @@ export async function fetchRadio(
 
   const res = await fetch(`${API_BASE}/media/radio?${params}`);
   if (!res.ok) {
-    throw new Error(await res.text() || 'Radio failed');
+    throw new Error((await res.text()) || 'Radio failed');
   }
   const data = await res.json();
   return Array.isArray(data.results) ? data.results : [];
 }
 
-export async function waitForStreamReady(trackId: string, timeoutMs = 6000): Promise<boolean> {
+export async function waitForStreamReady(
+  trackId: string,
+  timeoutMs = 6000,
+  options?: { preferHead?: boolean },
+): Promise<boolean> {
+  const preferHead = options?.preferHead !== false;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(`${API_BASE}/media/ready?id=${encodeURIComponent(trackId)}`);
       if (res.ok) {
         const data = await res.json();
+        if (preferHead && data.head_ready) return true;
         if (data.ready) return true;
       }
     } catch {
