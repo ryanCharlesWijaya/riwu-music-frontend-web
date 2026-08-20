@@ -749,7 +749,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main className="w-full px-3 pb-player pt-[7.25rem] sm:px-6 lg:px-8 lg:pt-[7.5rem]">
+        <main className="w-full px-3 pb-player pt-[7.25rem] sm:px-7 lg:px-8 lg:pt-[7.5rem]">
         {activeTab === 'player' && (
           <div className="space-y-6 lg:space-y-10">
             <section>
