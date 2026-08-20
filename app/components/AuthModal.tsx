@@ -61,62 +61,64 @@ export default function AuthModal({
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-ink-950/80 backdrop-blur-md" onClick={onClose} />
 
-      <div className="relative w-full max-w-md glass-panel rounded-3xl p-6 border border-white/10 shadow-2xl">
+      <div className="relative w-full max-w-md animate-rise-in rounded-3xl border border-white/[0.08] bg-ink-900/95 p-6 shadow-panel backdrop-blur-xl">
         <button
+          type="button"
           onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+          className="absolute right-4 top-4 rounded-xl p-2 text-ink-400 transition hover:bg-white/10 hover:text-mist"
         >
-          <X className="w-5 h-5" />
+          <X className="h-5 w-5" />
         </button>
 
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-white mb-1">
-            {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+        <div className="mb-6 text-center">
+          <p className="font-display text-sm font-bold text-signal">riwu-music</p>
+          <h2 className="mt-2 font-display text-2xl font-bold text-mist">
+            {mode === 'login' ? 'Welcome back' : 'Create account'}
           </h2>
-          <p className="text-sm text-slate-400">
+          <p className="mt-1 text-sm text-ink-400">
             {mode === 'login'
               ? 'Sign in to stream, download, and sync your library'
-              : 'Join riwu-music to save playlists and play history'}
+              : 'Save playlists, history, and offline tracks'}
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-sm">
+          <div className="mb-4 rounded-xl border border-ember/30 bg-ember/10 p-3 text-sm text-ember">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3">
           {mode === 'register' && (
             <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
               <input
                 type="text"
                 placeholder="Display name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
-                className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900/80 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500/50"
+                className="field w-full rounded-xl py-3 pl-10 pr-4 text-sm"
               />
             </div>
           )}
 
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
             <input
               type="email"
               placeholder="Email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900/80 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500/50"
+              className="field w-full rounded-xl py-3 pl-10 pr-4 text-sm"
             />
           </div>
 
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+            <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500" />
             <input
               type="password"
               placeholder="Password"
@@ -124,21 +126,17 @@ export default function AuthModal({
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={6}
-              className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-900/80 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500/50"
+              className="field w-full rounded-xl py-3 pl-10 pr-4 text-sm"
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg shadow-purple-600/30 hover:opacity-90 transition disabled:opacity-50"
-          >
-            {mode === 'login' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-            {loading ? 'Please wait...' : mode === 'login' ? 'Sign In' : 'Create Account'}
+          <button type="submit" disabled={loading} className="btn-signal flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm">
+            {mode === 'login' ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+            {loading ? 'Please wait…' : mode === 'login' ? 'Sign In' : 'Create Account'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-slate-400 mt-4">
+        <p className="mt-4 text-center text-sm text-ink-400">
           {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
           <button
             type="button"
@@ -146,7 +144,7 @@ export default function AuthModal({
               setMode(mode === 'login' ? 'register' : 'login');
               setError(null);
             }}
-            className="text-purple-400 hover:text-purple-300 font-semibold"
+            className="font-semibold text-signal hover:underline"
           >
             {mode === 'login' ? 'Sign up' : 'Sign in'}
           </button>

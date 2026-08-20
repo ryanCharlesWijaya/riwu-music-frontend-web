@@ -1,13 +1,15 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { Search, Music2, History, ListMusic, Sparkles } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Search, History, ListMusic, Download } from 'lucide-react';
 import Navbar from './components/Navbar';
 import TrackCard from './components/TrackCard';
 import PlayerBar from './components/PlayerBar';
 import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
 import DownloadDrawer from './components/DownloadDrawer';
+import PlaylistPicker from './components/PlaylistPicker';
+import QueueDrawer from './components/QueueDrawer';
 import {
   API_BASE,
   DownloadTask,
@@ -15,10 +17,28 @@ import {
   PlayHistory,
   Playlist,
   User,
+  cacheDownloadForOffline,
   fetchWithAuth,
+  latestDownloadByTrack,
+  prefetchTracks,
 } from './lib/api';
+import { listOfflineTrackIds, listOfflineTracks, OfflineTrackMeta } from './lib/offlineStore';
+import {
+  cacheDownloads,
+  cachePlaylistTracks,
+  cachePlaylists,
+  clearUserLocalCache,
+  readCachedDownloads,
+  readCachedPlaylistTracks,
+  readCachedPlaylists,
+} from './lib/localCache';
 
 const CATEGORIES = ['All', 'Music', 'Podcasts', 'Jazz', 'Electronic', 'Rock', 'Hip Hop'];
+
+type QueueState = {
+  tracks: MediaItem[];
+  index: number;
+};
 
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
@@ -28,13 +48,42 @@ export default function Home() {
   const [activeCategory, setActiveCategory] = useState('All');
   const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [currentTrack, setCurrentTrack] = useState<MediaItem | null>(null);
+  const [queueState, setQueueState] = useState<QueueState>({ tracks: [], index: 0 });
   const [isPlaying, setIsPlaying] = useState(false);
+  const [showQueue, setShowQueue] = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
+  const [playlistTracks, setPlaylistTracks] = useState<MediaItem[]>([]);
+  const [loadingPlaylistTracks, setLoadingPlaylistTracks] = useState(false);
   const [history, setHistory] = useState<PlayHistory[]>([]);
   const [downloads, setDownloads] = useState<DownloadTask[]>([]);
   const [showAuth, setShowAuth] = useState(false);
   const [showDownloads, setShowDownloads] = useState(false);
+  const [playlistTrack, setPlaylistTrack] = useState<MediaItem | null>(null);
+  const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
+  const [offlineTracks, setOfflineTracks] = useState<OfflineTrackMeta[]>([]);
+  const historyQueuedRef = useRef(false);
+  const playlistsQueuedRef = useRef(false);
+  const cachingRef = useRef<Set<string>>(new Set());
+  const lastHistoryTrackRef = useRef<string | null>(null);
+
+  const currentTrack = queueState.tracks[queueState.index] ?? null;
+  const canSkipPrev = queueState.index > 0;
+  const canSkipNext = queueState.index < queueState.tracks.length - 1;
+
+  const downloadsByTrack = useMemo(() => latestDownloadByTrack(downloads), [downloads]);
+
+  const refreshOfflineIds = useCallback(async () => {
+    const [ids, tracks] = await Promise.all([listOfflineTrackIds(), listOfflineTracks()]);
+    setOfflineTrackIds(new Set(ids));
+    setOfflineTracks(tracks);
+  }, []);
+
+  useEffect(() => {
+    void refreshOfflineIds();
+    setPlaylists(readCachedPlaylists());
+    setDownloads(readCachedDownloads());
+  }, [refreshOfflineIds]);
 
   useEffect(() => {
     const savedToken = localStorage.getItem('riwu_token');
@@ -57,8 +106,62 @@ export default function Home() {
     setUser(null);
     localStorage.removeItem('riwu_token');
     localStorage.removeItem('riwu_user');
+    clearUserLocalCache();
     setActiveTab('player');
+    setSelectedPlaylistId(null);
+    setPlaylistTracks([]);
+    setPlaylists([]);
+    setDownloads([]);
   };
+
+  const changeTab = (tab: 'player' | 'admin' | 'playlists' | 'history') => {
+    setActiveTab(tab);
+    if (tab !== 'playlists') {
+      setSelectedPlaylistId(null);
+      setPlaylistTracks([]);
+    } else {
+      setSelectedPlaylistId(null);
+      setPlaylistTracks([]);
+    }
+  };
+
+  const loadPlaylistTracks = useCallback(
+    async (playlistId: string) => {
+      if (!token) {
+        setPlaylistTracks(readCachedPlaylistTracks(playlistId));
+        return;
+      }
+      setLoadingPlaylistTracks(true);
+      try {
+        const data = await fetchWithAuth(
+          `/playlists/detail?id=${encodeURIComponent(playlistId)}`,
+          token
+        );
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const tracks: MediaItem[] = items
+          .map((item: { track?: MediaItem; track_id?: string }) => item.track)
+          .filter((t: MediaItem | undefined): t is MediaItem => !!t);
+        setPlaylistTracks(tracks);
+        cachePlaylistTracks(playlistId, tracks);
+        void prefetchTracks(tracks.map((t) => t.id));
+      } catch (err) {
+        console.error('Failed to load playlist tracks:', err);
+        setPlaylistTracks(readCachedPlaylistTracks(playlistId));
+      } finally {
+        setLoadingPlaylistTracks(false);
+      }
+    },
+    [token]
+  );
+
+  const openPlaylist = useCallback(
+    (playlistId: string) => {
+      setActiveTab('playlists');
+      setSelectedPlaylistId(playlistId);
+      void loadPlaylistTracks(playlistId);
+    },
+    [loadPlaylistTracks]
+  );
 
   const performSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
@@ -73,7 +176,9 @@ export default function Home() {
       );
       if (res.ok) {
         const data = await res.json();
-        setSearchResults(data.results || data || []);
+        const results = data.results || data || [];
+        setSearchResults(results);
+        void prefetchTracks(results.map((track: MediaItem) => track.id));
       }
     } catch (err) {
       console.error('Search failed:', err);
@@ -83,42 +188,145 @@ export default function Home() {
   }, [searchQuery, activeCategory, token]);
 
   const loadPlaylists = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setPlaylists(readCachedPlaylists());
+      return;
+    }
     try {
       const data = await fetchWithAuth('/playlists', token);
-      setPlaylists(data);
+      const list = Array.isArray(data) ? data : [];
+      setPlaylists(list);
+      cachePlaylists(list);
+      // Warm each playlist's tracks into local cache for offline browsing.
+      void Promise.all(
+        list.map(async (pl) => {
+          try {
+            const detail = await fetchWithAuth(
+              `/playlists/detail?id=${encodeURIComponent(pl.id)}`,
+              token
+            );
+            const items = Array.isArray(detail?.items) ? detail.items : [];
+            const tracks: MediaItem[] = items
+              .map((item: { track?: MediaItem }) => item.track)
+              .filter((t: MediaItem | undefined): t is MediaItem => !!t);
+            cachePlaylistTracks(pl.id, tracks);
+          } catch {
+            // keep any existing cache for this playlist
+          }
+        })
+      );
     } catch (err) {
       console.error('Failed to load playlists:', err);
+      setPlaylists(readCachedPlaylists());
     }
   }, [token]);
 
-  const loadHistory = useCallback(async () => {
-    if (!token) return;
+  const loadHistory = useCallback(async (): Promise<PlayHistory[]> => {
+    if (!token) return [];
     try {
       const data = await fetchWithAuth('/history', token);
-      setHistory(data);
+      const items = Array.isArray(data) ? (data as PlayHistory[]) : [];
+      setHistory(items);
+      return items;
     } catch (err) {
       console.error('Failed to load history:', err);
+      return [];
     }
   }, [token]);
 
   const loadDownloads = useCallback(async () => {
-    if (!token) return;
+    if (!token) {
+      setDownloads(readCachedDownloads());
+      return;
+    }
     try {
       const data = await fetchWithAuth('/downloads', token);
-      setDownloads(data);
+      const list = Array.isArray(data) ? data : [];
+      setDownloads(list);
+      cacheDownloads(list);
     } catch (err) {
       console.error('Failed to load downloads:', err);
+      setDownloads(readCachedDownloads());
     }
   }, [token]);
+
+  const queueHistoryDownloads = useCallback(
+    async (items: PlayHistory[]) => {
+      if (!token || items.length === 0) return;
+      try {
+        await fetchWithAuth('/downloads/history', token, {
+          method: 'POST',
+          body: JSON.stringify({
+            tracks: items.map((h) => ({
+              track_id: h.track_id,
+              title: h.track_title,
+              artist: h.track_artist,
+              source: h.source || 'youtube',
+              source_url: h.track_id.startsWith('yt_')
+                ? `https://www.youtube.com/watch?v=${h.track_id.replace(/^yt_/, '')}`
+                : '',
+              format: 'm4a',
+            })),
+          }),
+        });
+        loadDownloads();
+      } catch (err) {
+        console.error('Failed to queue history downloads:', err);
+      }
+    },
+    [token, loadDownloads]
+  );
+
+  const queuePlaylistDownloads = useCallback(
+    async (playlistId?: string | null) => {
+      if (!token) return;
+      try {
+        await fetchWithAuth('/downloads/playlist', token, {
+          method: 'POST',
+          body: JSON.stringify({ playlist_id: playlistId || '' }),
+        });
+        await loadDownloads();
+      } catch (err) {
+        console.error('Failed to queue playlist downloads:', err);
+      }
+    },
+    [token, loadDownloads]
+  );
 
   useEffect(() => {
     if (token) {
       loadPlaylists();
-      loadHistory();
       loadDownloads();
+      loadHistory().then((items) => {
+        if (!historyQueuedRef.current && items.length > 0) {
+          historyQueuedRef.current = true;
+          void queueHistoryDownloads(items);
+        }
+      });
+      if (!playlistsQueuedRef.current) {
+        playlistsQueuedRef.current = true;
+        void queuePlaylistDownloads(null);
+      }
+    } else {
+      historyQueuedRef.current = false;
+      playlistsQueuedRef.current = false;
     }
-  }, [token, loadPlaylists, loadHistory, loadDownloads]);
+  }, [token, loadPlaylists, loadHistory, loadDownloads, queueHistoryDownloads, queuePlaylistDownloads]);
+
+  // When VPS downloads complete, quietly cache them in IndexedDB for offline play.
+  useEffect(() => {
+    if (!token) return;
+    for (const task of downloads) {
+      if (task.status !== 'completed') continue;
+      if (offlineTrackIds.has(task.track_id)) continue;
+      if (cachingRef.current.has(task.track_id)) continue;
+      cachingRef.current.add(task.track_id);
+      void cacheDownloadForOffline(task, token)
+        .then(() => refreshOfflineIds())
+        .catch(console.error)
+        .finally(() => cachingRef.current.delete(task.track_id));
+    }
+  }, [downloads, token, offlineTrackIds, refreshOfflineIds]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -129,15 +337,11 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [token, downloads, loadDownloads]);
 
-  const handlePlay = async (track: MediaItem) => {
-    if (currentTrack?.id === track.id) {
-      setIsPlaying(!isPlaying);
-    } else {
-      setCurrentTrack(track);
-      setIsPlaying(true);
-    }
-
-    if (token) {
+  const recordHistory = useCallback(
+    async (track: MediaItem) => {
+      if (!token) return;
+      if (lastHistoryTrackRef.current === track.id) return;
+      lastHistoryTrackRef.current = track.id;
       try {
         await fetchWithAuth('/history', token, {
           method: 'POST',
@@ -150,19 +354,138 @@ export default function Home() {
             duration_played: 0,
           }),
         });
-        loadHistory();
+        void loadHistory();
       } catch {
         // non-blocking
       }
+    },
+    [token, loadHistory]
+  );
+
+  useEffect(() => {
+    if (currentTrack && isPlaying) {
+      void recordHistory(currentTrack);
+      void prefetchTracks(
+        queueState.tracks.slice(queueState.index, queueState.index + 3).map((t) => t.id)
+      );
     }
+  }, [currentTrack?.id, isPlaying, recordHistory, queueState.tracks, queueState.index]);
+
+  const handlePlay = (track: MediaItem) => {
+    if (currentTrack?.id === track.id) {
+      setIsPlaying(!isPlaying);
+      return;
+    }
+
+    setQueueState((prev) => {
+      const existing = prev.tracks.findIndex((t) => t.id === track.id);
+      if (existing >= 0) {
+        return { ...prev, index: existing };
+      }
+      if (prev.tracks.length === 0) {
+        return { tracks: [track], index: 0 };
+      }
+      const tracks = [
+        ...prev.tracks.slice(0, prev.index),
+        track,
+        ...prev.tracks.slice(prev.index + 1).filter((t) => t.id !== track.id),
+      ];
+      return { tracks, index: prev.index };
+    });
+    setIsPlaying(true);
   };
 
-  const handleDownload = async (track: MediaItem) => {
+  const handleAddToQueue = (track: MediaItem) => {
+    let startPlayback = false;
+    setQueueState((prev) => {
+      if (prev.tracks.length === 0) {
+        startPlayback = true;
+        return { tracks: [track], index: 0 };
+      }
+      if (prev.tracks.some((t) => t.id === track.id)) {
+        return prev;
+      }
+      return { tracks: [...prev.tracks, track], index: prev.index };
+    });
+    if (startPlayback) setIsPlaying(true);
+  };
+
+  const playQueue = (tracks: MediaItem[], startIndex = 0) => {
+    if (tracks.length === 0) return;
+    setQueueState({ tracks, index: Math.min(startIndex, tracks.length - 1) });
+    setIsPlaying(true);
+  };
+
+  const handleSkipNext = () => {
+    setQueueState((prev) => {
+      if (prev.index >= prev.tracks.length - 1) return prev;
+      return { ...prev, index: prev.index + 1 };
+    });
+    setIsPlaying(true);
+  };
+
+  const handleSkipPrev = () => {
+    setQueueState((prev) => {
+      if (prev.index <= 0) return prev;
+      return { ...prev, index: prev.index - 1 };
+    });
+    setIsPlaying(true);
+  };
+
+  const handleTrackEnded = () => {
+    let advanced = false;
+    setQueueState((prev) => {
+      if (prev.index >= prev.tracks.length - 1) {
+        return prev;
+      }
+      advanced = true;
+      return { ...prev, index: prev.index + 1 };
+    });
+    setIsPlaying(advanced);
+  };
+
+  const playAtQueueIndex = (index: number) => {
+    setQueueState((prev) => {
+      if (index < 0 || index >= prev.tracks.length) return prev;
+      return { ...prev, index };
+    });
+    setIsPlaying(true);
+  };
+
+  const removeFromQueue = (index: number) => {
+    setQueueState((prev) => {
+      if (index < 0 || index >= prev.tracks.length) return prev;
+      const tracks = prev.tracks.filter((_, i) => i !== index);
+      if (tracks.length === 0) {
+        setIsPlaying(false);
+        return { tracks: [], index: 0 };
+      }
+      let nextIndex = prev.index;
+      if (index < prev.index) nextIndex = prev.index - 1;
+      else if (index === prev.index) nextIndex = Math.min(prev.index, tracks.length - 1);
+      return { tracks, index: nextIndex };
+    });
+  };
+
+  const clearQueue = () => {
+    setQueueState({ tracks: [], index: 0 });
+    setIsPlaying(false);
+  };
+
+  const handleDownload = async (track: MediaItem, options?: { silent?: boolean }) => {
     if (!token) {
-      setShowAuth(true);
+      if (!options?.silent) setShowAuth(true);
       return;
     }
     try {
+      const existing = downloadsByTrack[track.id];
+      if (existing?.status === 'completed') {
+        await cacheDownloadForOffline(existing, token);
+        await refreshOfflineIds();
+        if (!options?.silent) setShowDownloads(true);
+        return;
+      }
+
       await fetchWithAuth('/downloads', token, {
         method: 'POST',
         body: JSON.stringify({
@@ -171,116 +494,116 @@ export default function Home() {
           artist: track.artist,
           source: track.source,
           source_url: track.source_url,
-          format: 'mp3',
+          format: 'm4a',
         }),
       });
-      loadDownloads();
-      setShowDownloads(true);
+      await loadDownloads();
+      if (!options?.silent) setShowDownloads(true);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Download failed');
+      if (!options?.silent) {
+        alert(err instanceof Error ? err.message : 'Download failed');
+      } else {
+        console.error('Silent download failed:', err);
+      }
     }
   };
 
-  const handleAddToPlaylist = async (track: MediaItem) => {
+  const handleAddToPlaylist = (track: MediaItem) => {
     if (!token) {
       setShowAuth(true);
       return;
     }
-    try {
-      let playlistId = playlists[0]?.id;
-      if (!playlistId) {
-        const created = await fetchWithAuth('/playlists', token, {
-          method: 'POST',
-          body: JSON.stringify({ name: 'My Favorites', description: 'Saved tracks' }),
-        });
-        playlistId = created.id;
-        loadPlaylists();
-      }
-      await fetchWithAuth('/playlists/items', token, {
-        method: 'POST',
-        body: JSON.stringify({ playlist_id: playlistId, track_id: track.id }),
-      });
-      loadPlaylists();
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to add to playlist');
-    }
+    setPlaylistTrack(track);
   };
+
+  const addTrackToPlaylist = async (playlistId: string, track: MediaItem) => {
+    if (!token) return;
+    await fetchWithAuth('/playlists/items', token, {
+      method: 'POST',
+      body: JSON.stringify({
+        playlist_id: playlistId,
+        track_id: track.id,
+        title: track.title,
+        artist: track.artist,
+        source: track.source,
+        source_url: track.source_url,
+        thumbnail_url: track.thumbnail_url,
+        duration: track.duration,
+      }),
+    });
+    await loadPlaylists();
+    if (selectedPlaylistId === playlistId) {
+      await loadPlaylistTracks(playlistId);
+    }
+    // Silently cache new playlist track on the VPS.
+    void handleDownload(track, { silent: true });
+  };
+
+  const createPlaylistAndAdd = async (name: string, track: MediaItem) => {
+    if (!token) return;
+    const created = await fetchWithAuth('/playlists', token, {
+      method: 'POST',
+      body: JSON.stringify({ name, description: 'Created from search' }),
+    });
+    await addTrackToPlaylist(created.id, track);
+  };
+
+  const selectedPlaylist = playlists.find((p) => p.id === selectedPlaylistId) || null;
 
   const pendingCount = downloads.filter((d) =>
     ['pending', 'downloading', 'converting'].includes(d.status)
   ).length;
 
   return (
-    <div className="min-h-screen bg-[#090b10] relative">
-      <div className="fixed top-0 left-1/4 w-96 h-96 bg-purple-600/10 rounded-full blur-[120px] pointer-events-none animate-glow" />
-      <div className="fixed bottom-1/4 right-1/4 w-80 h-80 bg-cyan-600/10 rounded-full blur-[100px] pointer-events-none animate-glow" />
-
+    <div className="app-shell">
       <Navbar
         user={user}
         activeTab={activeTab}
-        setActiveTab={setActiveTab}
+        setActiveTab={changeTab}
+        playlists={playlists}
+        selectedPlaylistId={selectedPlaylistId}
+        onSelectPlaylist={openPlaylist}
         onOpenAuth={() => setShowAuth(true)}
         onOpenDownloads={() => setShowDownloads(true)}
         onLogout={handleLogout}
         pendingDownloadsCount={pendingCount}
       />
 
-      <main className="max-w-7xl mx-auto px-4 lg:px-8 py-6 pb-32">
+      <div className="app-content min-h-[100dvh] lg:pl-[17.5rem]">
+        <main className="w-full px-4 pb-player pt-[4.75rem] sm:px-6 lg:px-8 lg:pt-7">
         {activeTab === 'player' && (
-          <div className="space-y-8">
-            {/* Hero Banner */}
-            <section className="glass-panel rounded-3xl p-6 lg:p-10 border border-white/10 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-r from-indigo-950/60 via-purple-950/40 to-transparent" />
-              <div className="relative z-10 max-w-2xl">
-                <div className="flex items-center gap-2 mb-3">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-purple-300">
-                    Modular Audio Engine
-                  </span>
-                </div>
-                <h1 className="text-3xl lg:text-5xl font-extrabold text-white mb-3">
-                  Stream from YouTube, GDrive &amp; Local
-                </h1>
-                <p className="text-slate-300 text-sm lg:text-base mb-6">
-                  Search across plugin media sources, stream instantly, and queue background downloads
-                  for offline playback — all powered by the riwu-music Go backend.
-                </p>
+          <div className="space-y-8 lg:space-y-10">
+            <section className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-500" />
+                <input
+                  type="text"
+                  placeholder="Search tracks, artists, albums..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && performSearch()}
+                  className="field w-full rounded-2xl py-3.5 pl-12 pr-4 text-sm sm:text-base"
+                />
               </div>
+              <button
+                type="button"
+                onClick={performSearch}
+                disabled={isSearching}
+                className="btn-signal shrink-0 rounded-2xl px-7 py-3.5 text-sm sm:text-base"
+              >
+                {isSearching ? 'Searching…' : 'Search'}
+              </button>
             </section>
 
-            {/* Search Bar */}
             <section className="space-y-4">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                  <input
-                    type="text"
-                    placeholder="Search tracks, artists, albums..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && performSearch()}
-                    className="w-full pl-12 pr-4 py-3.5 rounded-2xl bg-slate-900/80 border border-white/10 text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500/50"
-                  />
-                </div>
-                <button
-                  onClick={performSearch}
-                  disabled={isSearching}
-                  className="px-6 py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-semibold shadow-lg shadow-purple-600/30 hover:opacity-90 transition disabled:opacity-50"
-                >
-                  {isSearching ? 'Searching...' : 'Search'}
-                </button>
-              </div>
-
-              {/* Category Pills */}
-              <div className="flex flex-wrap gap-2">
+              <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {CATEGORIES.map((cat) => (
                   <button
                     key={cat}
+                    type="button"
                     onClick={() => setActiveCategory(cat)}
-                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-all ${
-                      activeCategory === cat
-                        ? 'bg-white text-slate-900 shadow-lg'
-                        : 'glass-pill text-slate-400 hover:text-white'
+                    className={`chip shrink-0 rounded-xl px-4 py-2 text-sm font-medium ${
+                      activeCategory === cat ? 'chip-active' : ''
                     }`}
                   >
                     {cat}
@@ -289,33 +612,41 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Search Results Grid */}
             <section>
-              <div className="flex items-center gap-2 mb-4">
-                <Music2 className="w-5 h-5 text-purple-400" />
-                <h2 className="text-xl font-bold text-white">
-                  {searchResults.length > 0 ? 'Search Results' : 'Popular Tracks'}
-                </h2>
+              <div className="mb-5 flex items-end justify-between gap-3">
+                <div>
+                  <h2 className="font-display text-2xl font-bold text-mist">
+                    {searchResults.length > 0 ? 'Search results' : 'Start searching'}
+                  </h2>
+                  <p className="mt-1 text-sm text-ink-400">
+                    {searchResults.length > 0
+                      ? `${searchResults.length} tracks ready to stream`
+                      : 'Type a song or artist above to fill this grid'}
+                  </p>
+                </div>
               </div>
 
               {searchResults.length === 0 && !isSearching ? (
-                <div className="glass-panel rounded-2xl p-12 text-center border border-white/10">
-                  <Search className="w-12 h-12 mx-auto mb-4 text-slate-600" />
-                  <p className="text-slate-400">Search for music across all active media modules</p>
-                  <p className="text-xs text-slate-500 mt-2">
-                    Try &quot;melody&quot;, &quot;jazz&quot;, or &quot;electronic&quot;
+                <div className="surface flex flex-col items-center justify-center rounded-[1.5rem] px-6 py-16 text-center">
+                  <Search className="mb-4 h-12 w-12 text-ink-600" />
+                  <p className="font-display text-lg font-semibold text-ink-300">No results yet</p>
+                  <p className="mt-2 max-w-sm text-sm text-ink-500">
+                    Try “jazz”, “lofi”, or an artist name — results warm up in the background as they appear.
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
                   {searchResults.map((track) => (
                     <TrackCard
                       key={track.id}
                       track={track}
                       isPlaying={currentTrack?.id === track.id && isPlaying}
+                      downloadTask={downloadsByTrack[track.id]}
+                      isOfflineReady={offlineTrackIds.has(track.id)}
                       onPlay={handlePlay}
                       onDownload={handleDownload}
                       onAddToPlaylist={handleAddToPlaylist}
+                      onAddToQueue={handleAddToQueue}
                     />
                   ))}
                 </div>
@@ -325,36 +656,107 @@ export default function Home() {
         )}
 
         {activeTab === 'playlists' && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <ListMusic className="w-6 h-6 text-purple-400" />
-              <h1 className="text-2xl font-bold text-white">Your Playlists</h1>
+          <div className="space-y-6 animate-rise-in">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <ListMusic className="h-7 w-7 shrink-0 text-signal" />
+                <h1 className="truncate font-display text-2xl font-bold text-mist sm:text-3xl">
+                  {selectedPlaylist ? selectedPlaylist.name : 'Your Playlists'}
+                </h1>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {selectedPlaylist && playlistTracks.length > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => playQueue(playlistTracks)}
+                      className="btn-signal rounded-xl px-4 py-2 text-sm"
+                    >
+                      Play all
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void queuePlaylistDownloads(selectedPlaylistId)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-signal/35 bg-signal/10 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal/20"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download all
+                    </button>
+                  </>
+                )}
+                {!selectedPlaylist && token && playlists.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => void queuePlaylistDownloads(null)}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-signal/35 bg-signal/10 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal/20"
+                  >
+                    <Download className="h-4 w-4" />
+                    Download all playlists
+                  </button>
+                )}
+                {selectedPlaylist && (
+                  <button
+                    type="button"
+                    onClick={() => changeTab('playlists')}
+                    className="text-sm text-ink-400 transition hover:text-mist"
+                  >
+                    ← All playlists
+                  </button>
+                )}
+              </div>
             </div>
             {!token ? (
-              <div className="glass-panel rounded-2xl p-12 text-center border border-white/10">
-                <p className="text-slate-400">Sign in to view and manage playlists</p>
+              <div className="surface rounded-[1.5rem] px-6 py-14 text-center">
+                <p className="text-ink-400">Sign in to view and manage playlists</p>
                 <button
+                  type="button"
                   onClick={() => setShowAuth(true)}
-                  className="mt-4 px-6 py-2 rounded-xl bg-purple-600 text-white font-semibold"
+                  className="btn-signal mt-4 rounded-xl px-6 py-2.5 text-sm"
                 >
                   Sign In
                 </button>
               </div>
+            ) : selectedPlaylistId ? (
+              loadingPlaylistTracks ? (
+                <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">Loading tracks...</div>
+              ) : playlistTracks.length === 0 ? (
+                <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
+                  This playlist is empty. Add tracks from search.
+                </div>
+              ) : (
+                <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                  {playlistTracks.map((track) => (
+                    <TrackCard
+                      key={track.id}
+                      track={track}
+                      isPlaying={currentTrack?.id === track.id && isPlaying}
+                      downloadTask={downloadsByTrack[track.id]}
+                      isOfflineReady={offlineTrackIds.has(track.id)}
+                      onPlay={handlePlay}
+                      onDownload={handleDownload}
+                      onAddToPlaylist={handleAddToPlaylist}
+                      onAddToQueue={handleAddToQueue}
+                    />
+                  ))}
+                </div>
+              )
             ) : playlists.length === 0 ? (
-              <div className="glass-panel rounded-2xl p-12 text-center border border-white/10">
-                <p className="text-slate-400">No playlists yet. Add tracks from search results.</p>
+              <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
+                No playlists yet. Add tracks from search results.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {playlists.map((pl) => (
-                  <div
+                  <button
                     key={pl.id}
-                    className="glass-panel rounded-2xl p-5 border border-white/10 hover:border-purple-500/30 transition"
+                    type="button"
+                    onClick={() => openPlaylist(pl.id)}
+                    className="surface rounded-2xl p-5 text-left transition hover:border-signal/35 hover:bg-ink-800/50"
                   >
-                    <h3 className="font-bold text-white text-lg">{pl.name}</h3>
-                    <p className="text-xs text-slate-400 mt-1">{pl.description}</p>
-                    <p className="text-sm text-purple-400 mt-3 font-mono">{pl.item_count} tracks</p>
-                  </div>
+                    <h3 className="font-display text-lg font-bold text-mist">{pl.name}</h3>
+                    <p className="mt-1 text-xs text-ink-400">{pl.description || 'No description'}</p>
+                    <p className="mt-4 font-mono text-sm text-signal">{pl.item_count} tracks</p>
+                  </button>
                 ))}
               </div>
             )}
@@ -362,47 +764,49 @@ export default function Home() {
         )}
 
         {activeTab === 'history' && (
-          <div className="space-y-6">
-            <div className="flex items-center gap-2">
-              <History className="w-6 h-6 text-cyan-400" />
-              <h1 className="text-2xl font-bold text-white">Play History</h1>
+          <div className="space-y-6 animate-rise-in">
+            <div className="flex items-center gap-3">
+              <History className="h-7 w-7 text-ember" />
+              <h1 className="font-display text-2xl font-bold text-mist sm:text-3xl">Play History</h1>
             </div>
             {!token ? (
-              <div className="glass-panel rounded-2xl p-12 text-center border border-white/10">
-                <p className="text-slate-400">Sign in to view your listening history</p>
+              <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
+                Sign in to view your listening history
               </div>
             ) : history.length === 0 ? (
-              <div className="glass-panel rounded-2xl p-12 text-center border border-white/10">
-                <p className="text-slate-400">No play history yet. Start streaming!</p>
+              <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
+                No play history yet. Start streaming!
               </div>
             ) : (
-              <div className="glass-panel rounded-2xl border border-white/10 overflow-hidden">
-                <table className="w-full text-sm text-slate-300">
-                  <thead className="text-xs text-slate-400 uppercase bg-slate-900/80 border-b border-white/10">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Track</th>
-                      <th className="px-4 py-3 text-left">Artist</th>
-                      <th className="px-4 py-3 text-left">Source</th>
-                      <th className="px-4 py-3 text-right">Played At</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {history.map((h) => (
-                      <tr key={h.id} className="hover:bg-white/5 transition">
-                        <td className="px-4 py-3 font-semibold text-white">{h.track_title}</td>
-                        <td className="px-4 py-3 text-slate-400">{h.track_artist}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-slate-800 border border-white/10">
-                            {h.source}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right text-xs font-mono text-slate-500">
-                          {new Date(h.played_at).toLocaleString()}
-                        </td>
+              <div className="surface overflow-hidden rounded-2xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[540px] text-sm text-ink-300">
+                    <thead className="border-b border-white/[0.06] bg-ink-950/60 text-left text-[11px] uppercase tracking-[0.14em] text-ink-500">
+                      <tr>
+                        <th className="px-4 py-3 font-semibold">Track</th>
+                        <th className="px-4 py-3 font-semibold">Artist</th>
+                        <th className="px-4 py-3 font-semibold">Source</th>
+                        <th className="px-4 py-3 text-right font-semibold">Played</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-white/[0.04]">
+                      {history.map((h) => (
+                        <tr key={h.id} className="transition hover:bg-white/[0.03]">
+                          <td className="px-4 py-3 font-semibold text-mist">{h.track_title}</td>
+                          <td className="px-4 py-3 text-ink-400">{h.track_artist}</td>
+                          <td className="px-4 py-3">
+                            <span className="rounded-lg border border-white/10 bg-ink-900 px-2 py-0.5 text-[10px] font-bold uppercase">
+                              {h.source}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono text-xs text-ink-500">
+                            {new Date(h.played_at).toLocaleString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </div>
@@ -410,12 +814,21 @@ export default function Home() {
 
         {activeTab === 'admin' && user?.role === 'admin' && <AdminPanel token={token} />}
       </main>
+      </div>
 
       <PlayerBar
         currentTrack={currentTrack}
         isPlaying={isPlaying}
+        queueCount={queueState.tracks.length}
+        canSkipPrev={canSkipPrev}
+        canSkipNext={canSkipNext}
         onPlayPause={() => setIsPlaying(!isPlaying)}
+        onSkipPrev={handleSkipPrev}
+        onSkipNext={handleSkipNext}
+        onTrackEnded={handleTrackEnded}
+        onOpenQueue={() => setShowQueue(true)}
         onDownloadTrack={handleDownload}
+        offlineTrackIds={offlineTrackIds}
       />
 
       <AuthModal
@@ -428,6 +841,33 @@ export default function Home() {
         isOpen={showDownloads}
         onClose={() => setShowDownloads(false)}
         downloads={downloads}
+        offlineTracks={offlineTracks}
+        offlineTrackIds={offlineTrackIds}
+      />
+
+      <QueueDrawer
+        isOpen={showQueue}
+        onClose={() => setShowQueue(false)}
+        queue={queueState.tracks}
+        currentIndex={queueState.index}
+        onPlayAt={playAtQueueIndex}
+        onRemoveAt={removeFromQueue}
+        onClear={clearQueue}
+      />
+
+      <PlaylistPicker
+        isOpen={!!playlistTrack}
+        track={playlistTrack}
+        playlists={playlists}
+        onClose={() => setPlaylistTrack(null)}
+        onSelect={async (playlistId) => {
+          if (!playlistTrack) return;
+          await addTrackToPlaylist(playlistId, playlistTrack);
+        }}
+        onCreate={async (name) => {
+          if (!playlistTrack) return;
+          await createPlaylistAndAdd(name, playlistTrack);
+        }}
       />
     </div>
   );

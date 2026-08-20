@@ -1,13 +1,26 @@
 'use client';
 
 import React from 'react';
-import { Music, Shield, Download, History, ListMusic, LogIn, LogOut, User, Radio, Sparkles } from 'lucide-react';
-import { User as UserType } from '../lib/api';
+import {
+  Music,
+  Shield,
+  Download,
+  History,
+  ListMusic,
+  LogIn,
+  LogOut,
+  Radio,
+  Settings,
+} from 'lucide-react';
+import { Playlist, User as UserType } from '../lib/api';
 
 interface NavbarProps {
   user: UserType | null;
   activeTab: 'player' | 'admin' | 'playlists' | 'history';
   setActiveTab: (tab: 'player' | 'admin' | 'playlists' | 'history') => void;
+  playlists: Playlist[];
+  selectedPlaylistId: string | null;
+  onSelectPlaylist: (playlistId: string) => void;
   onOpenAuth: () => void;
   onOpenDownloads: () => void;
   onLogout: () => void;
@@ -18,133 +31,160 @@ export default function Navbar({
   user,
   activeTab,
   setActiveTab,
+  playlists,
+  selectedPlaylistId,
+  onSelectPlaylist,
   onOpenAuth,
   onOpenDownloads,
   onLogout,
   pendingDownloadsCount,
 }: NavbarProps) {
+  const navBtn = (active: boolean) =>
+    `flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 ${
+      active
+        ? 'bg-signal text-ink-950 shadow-lift'
+        : 'text-ink-300 hover:text-mist hover:bg-white/[0.04]'
+    }`;
+
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b border-white/10 px-4 lg:px-8 py-3">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-        {/* Brand Logo */}
-        <div 
+    <header className="fixed top-0 left-0 z-40 w-full border-b border-white/[0.06] bg-ink-950/80 backdrop-blur-xl lg:w-[17.5rem] lg:h-[100dvh] lg:border-r lg:border-b-0">
+      <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-3 lg:h-full lg:flex-col lg:items-stretch lg:overflow-hidden lg:px-5 lg:py-6">
+        <button
+          type="button"
           onClick={() => setActiveTab('player')}
-          className="flex items-center gap-3 cursor-pointer group"
+          className="group flex min-w-0 flex-shrink-0 items-center gap-3 text-left"
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-purple-600 to-pink-500 p-0.5 shadow-lg shadow-purple-500/20 group-hover:scale-105 transition-transform">
-            <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
-              <Music className="w-5 h-5 text-purple-400 group-hover:rotate-12 transition-transform" />
-            </div>
+          <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-signal text-ink-950 transition-transform duration-300 group-hover:rotate-6 group-hover:scale-105">
+            <Music className="h-5 w-5" strokeWidth={2.4} />
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-                riwu-music
-              </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" /> v1.0
-              </span>
+          <div className="min-w-0">
+            <div className="font-display text-lg font-extrabold tracking-tight text-mist sm:text-xl">
+              riwu<span className="text-signal">-</span>music
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">Modular Audio Engine & Cloud Offloader</p>
+            <p className="mt-0.5 hidden text-[11px] uppercase tracking-[0.16em] text-ink-400 lg:block">
+              Signal room
+            </p>
           </div>
-        </div>
+        </button>
 
-        {/* Navigation Tabs */}
-        <nav className="flex items-center gap-1 sm:gap-2 bg-slate-900/60 p-1 rounded-xl border border-white/5">
-          <button
-            onClick={() => setActiveTab('player')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'player'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
-          >
-            <Radio className="w-4 h-4" />
-            <span>Stream Player</span>
+        <nav className="flex max-w-[55vw] items-center gap-1 overflow-x-auto sm:max-w-none sm:gap-1.5 lg:mt-8 lg:max-w-none lg:flex-1 lg:min-h-0 lg:flex-col lg:items-stretch lg:gap-1.5 lg:overflow-y-auto">
+          <p className="mb-1 hidden px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-500 lg:block">
+            Listen
+          </p>
+          <button type="button" onClick={() => setActiveTab('player')} className={navBtn(activeTab === 'player')}>
+            <Radio className="h-4 w-4" />
+            <span>Stream</span>
           </button>
 
+          <p className="mb-1 mt-4 hidden px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-500 lg:block">
+            Playlists
+          </p>
           <button
+            type="button"
             onClick={() => setActiveTab('playlists')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'playlists'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={navBtn(activeTab === 'playlists' && !selectedPlaylistId)}
           >
-            <ListMusic className="w-4 h-4" />
-            <span className="hidden sm:inline">Playlists</span>
+            <ListMusic className="h-4 w-4" />
+            <span className="whitespace-nowrap">All playlists</span>
           </button>
 
+          <div className="hidden lg:flex lg:flex-col lg:gap-0.5 lg:px-1">
+            {playlists.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-ink-500">
+                {user ? 'No playlists yet' : 'Sign in to see playlists'}
+              </p>
+            ) : (
+              playlists.map((pl) => (
+                <button
+                  key={pl.id}
+                  type="button"
+                  onClick={() => onSelectPlaylist(pl.id)}
+                  className={`w-full truncate rounded-xl px-3 py-2 text-left text-sm transition ${
+                    selectedPlaylistId === pl.id && activeTab === 'playlists'
+                      ? 'bg-white/[0.07] text-mist'
+                      : 'text-ink-400 hover:bg-white/[0.04] hover:text-mist'
+                  }`}
+                  title={pl.name}
+                >
+                  <span className="block truncate">{pl.name}</span>
+                  <span className="block font-mono text-[10px] text-ink-500">{pl.item_count} songs</span>
+                </button>
+              ))
+            )}
+          </div>
+
           <button
+            type="button"
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              activeTab === 'history'
-                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-                : 'text-slate-400 hover:text-white hover:bg-white/5'
-            }`}
+            className={`${navBtn(activeTab === 'history')} lg:mt-3`}
           >
-            <History className="w-4 h-4" />
+            <History className="h-4 w-4" />
             <span className="hidden sm:inline">History</span>
           </button>
 
-          {/* Admin Control Center Tab (RBAC Protected) */}
+          <p className="mb-1 mt-4 hidden px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-500 lg:block">
+            System
+          </p>
           {user?.role === 'admin' && (
-            <button
-              onClick={() => setActiveTab('admin')}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                activeTab === 'admin'
-                  ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
-                  : 'text-amber-400 hover:text-white hover:bg-amber-500/10'
-              }`}
-            >
-              <Shield className="w-4 h-4" />
-              <span>Admin Panel</span>
+            <button type="button" onClick={() => setActiveTab('admin')} className={navBtn(activeTab === 'admin')}>
+              <Shield className="h-4 w-4" />
+              <span>Admin</span>
             </button>
           )}
+          <button
+            type="button"
+            disabled
+            title="Settings coming soon"
+            className="flex cursor-not-allowed items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-600"
+          >
+            <Settings className="h-4 w-4" />
+            <span className="hidden lg:inline">Settings</span>
+          </button>
         </nav>
 
-        {/* Right actions */}
-        <div className="flex items-center gap-3">
-          {/* Download Queue Drawer Button */}
+        <div className="flex flex-shrink-0 items-center gap-2 lg:mt-auto lg:flex-col lg:items-stretch lg:gap-2 lg:rounded-2xl lg:border lg:border-white/[0.06] lg:bg-ink-900/60 lg:p-3">
           <button
+            type="button"
             onClick={onOpenDownloads}
-            className="relative p-2 rounded-xl bg-slate-900/80 border border-white/10 hover:border-purple-500/50 text-slate-300 hover:text-white transition-all"
-            title="Async Download Worker Queue"
+            className="relative flex items-center gap-2 rounded-xl border border-white/[0.06] bg-ink-900/70 p-2.5 text-ink-200 transition hover:border-signal/40 hover:text-signal lg:w-full lg:px-3"
+            title="Offline library"
           >
-            <Download className="w-5 h-5 text-cyan-400" />
+            <Download className="h-4 w-4 text-signal" />
+            <span className="hidden text-xs font-semibold lg:inline">Offline library</span>
             {pendingDownloadsCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow-lg animate-pulse">
+              <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ember px-1 text-[10px] font-bold text-white">
                 {pendingDownloadsCount}
               </span>
             )}
           </button>
 
-          {/* Auth Button / Profile */}
           {user ? (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/80 border border-white/10">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-bold text-xs">
+            <div className="flex items-center gap-2 lg:w-full">
+              <div className="flex min-w-0 flex-1 items-center gap-2 rounded-xl border border-white/[0.06] bg-ink-900/70 px-2.5 py-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-signal to-ember font-display text-xs font-bold text-ink-950">
                   {user.name.charAt(0).toUpperCase()}
                 </div>
-                <div className="text-left hidden md:block">
-                  <div className="text-xs font-semibold text-white leading-none">{user.name}</div>
-                  <div className="text-[10px] text-purple-400 font-mono capitalize">{user.role}</div>
+                <div className="hidden min-w-0 text-left md:block">
+                  <div className="truncate text-xs font-semibold text-mist">{user.name}</div>
+                  <div className="font-mono text-[10px] capitalize text-signal/80">{user.role}</div>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={onLogout}
-                className="p-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 transition-all"
+                className="rounded-xl border border-ember/25 bg-ember/10 p-2 text-ember transition hover:bg-ember/20 lg:self-stretch"
                 title="Sign out"
               >
-                <LogOut className="w-4 h-4" />
+                <LogOut className="h-4 w-4" />
               </button>
             </div>
           ) : (
             <button
+              type="button"
               onClick={onOpenAuth}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold shadow-lg shadow-purple-600/30 hover:opacity-90 transition-all"
+              className="btn-signal flex w-auto items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm lg:w-full"
             >
-              <LogIn className="w-4 h-4" />
+              <LogIn className="h-4 w-4" />
               <span>Sign In</span>
             </button>
           )}

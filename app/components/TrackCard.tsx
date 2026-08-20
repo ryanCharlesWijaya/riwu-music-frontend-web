@@ -1,42 +1,64 @@
 'use client';
 
 import React from 'react';
-import { Play, Pause, Download, Plus, HardDrive, Layers, Clock, Disc, Video } from 'lucide-react';
-import { MediaItem } from '../lib/api';
+import {
+  Play,
+  Pause,
+  Download,
+  Plus,
+  ListPlus,
+  HardDrive,
+  Layers,
+  Clock,
+  Video,
+  Check,
+  Loader2,
+} from 'lucide-react';
+import { MediaItem, DownloadTask, prefetchTracks } from '../lib/api';
 
 interface TrackCardProps {
   track: MediaItem;
   isPlaying: boolean;
+  downloadTask?: DownloadTask | null;
+  isOfflineReady?: boolean;
   onPlay: (track: MediaItem) => void;
   onDownload: (track: MediaItem) => void;
   onAddToPlaylist: (track: MediaItem) => void;
+  onAddToQueue: (track: MediaItem) => void;
 }
 
 export default function TrackCard({
   track,
   isPlaying,
+  downloadTask,
+  isOfflineReady,
   onPlay,
   onDownload,
   onAddToPlaylist,
+  onAddToQueue,
 }: TrackCardProps) {
-  const getSourceBadge = (source: string) => {
+  const status = downloadTask?.status;
+  const isDownloaded = status === 'completed' || !!isOfflineReady;
+  const isBusy = status === 'pending' || status === 'downloading' || status === 'converting';
+
+  const sourceLabel = (source: string) => {
     switch (source) {
       case 'youtube':
         return (
-          <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-red-500/20 text-red-400 border border-red-500/30">
-            <Video className="w-3 h-3" /> YouTube
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-ember">
+            <Video className="h-3 w-3" /> YouTube
           </span>
         );
       case 'gdrive':
         return (
-          <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <HardDrive className="w-3 h-3" /> GDrive
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-teal-300">
+            <HardDrive className="h-3 w-3" /> GDrive
           </span>
         );
       default:
         return (
-          <span className="flex items-center gap-1 text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
-            <Layers className="w-3 h-3" /> Local
+          <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-signal">
+            <Layers className="h-3 w-3" /> Local
           </span>
         );
     }
@@ -49,79 +71,111 @@ export default function TrackCard({
   };
 
   return (
-    <div className="group glass-panel rounded-2xl p-4 border border-white/10 hover:border-purple-500/40 transition-all duration-300 hover:shadow-xl hover:shadow-purple-900/20 flex flex-col justify-between">
-      {/* Thumbnail Container */}
-      <div className="relative aspect-video w-full rounded-xl overflow-hidden mb-3 bg-slate-900">
+    <article
+      className={`group relative flex flex-col overflow-hidden rounded-2xl border transition-all duration-300 ${
+        isPlaying
+          ? 'border-signal/50 bg-signal/5 shadow-lift'
+          : 'border-white/[0.06] bg-ink-900/50 hover:border-white/15 hover:bg-ink-800/60'
+      }`}
+      onMouseEnter={() => track.id.startsWith('yt_') && void prefetchTracks([track.id])}
+    >
+      <div className="relative aspect-[16/10] overflow-hidden bg-ink-950">
         <img
-          src={track.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80'}
-          alt={track.title}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          src={track.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800&q=80'}
+          alt=""
+          className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
         />
+        <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/20 to-transparent" />
 
-        <div className="absolute top-2 left-2">{getSourceBadge(track.source)}</div>
-
-        <div className="absolute top-2 right-2 px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur text-[10px] font-mono text-slate-300 border border-white/10 flex items-center gap-1">
-          <Clock className="w-2.5 h-2.5" />
+        <div className="absolute left-3 top-3">{sourceLabel(track.source)}</div>
+        <div className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-lg bg-ink-950/70 px-2 py-1 font-mono text-[10px] text-ink-200 backdrop-blur">
+          <Clock className="h-3 w-3" />
           {formatDuration(track.duration)}
         </div>
 
-        {/* Hover Overlay Play Button */}
-        <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[2px]">
+        {isDownloaded && (
+          <div className="absolute bottom-3 left-3 inline-flex items-center gap-1 rounded-lg bg-signal px-2 py-1 text-[10px] font-bold uppercase text-ink-950">
+            <Check className="h-3 w-3" /> Saved
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => onPlay(track)}
+          className="absolute bottom-3 right-3 flex h-12 w-12 items-center justify-center rounded-full bg-signal text-ink-950 opacity-100 shadow-lift transition-transform duration-200 hover:scale-105 sm:opacity-0 sm:group-hover:opacity-100"
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+        >
+          {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+        </button>
+      </div>
+
+      <div className="flex flex-1 flex-col gap-3 p-4">
+        <div className="min-w-0">
+          <h3 className="truncate font-display text-base font-bold text-mist transition-colors group-hover:text-signal">
+            {track.title}
+          </h3>
+          <p className="mt-0.5 truncate text-sm text-ink-400">{track.artist}</p>
+        </div>
+
+        <div className="mt-auto flex items-center gap-1.5 border-t border-white/[0.05] pt-3">
           <button
+            type="button"
             onClick={() => onPlay(track)}
-            className="w-12 h-12 rounded-full bg-purple-600 hover:bg-purple-500 text-white flex items-center justify-center shadow-lg shadow-purple-600/50 hover:scale-110 transition-all"
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+              isPlaying ? 'bg-signal text-ink-950' : 'bg-white/[0.04] text-mist hover:bg-white/[0.08]'
+            }`}
           >
-            {isPlaying ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current ml-1" />}
+            {isPlaying ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 fill-current" />}
+            {isPlaying ? 'Playing' : 'Play'}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onAddToQueue(track)}
+            className="rounded-xl bg-white/[0.04] p-2 text-ink-300 transition hover:bg-white/[0.08] hover:text-signal"
+            title="Add to queue"
+          >
+            <ListPlus className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onAddToPlaylist(track)}
+            className="rounded-xl bg-white/[0.04] p-2 text-ink-300 transition hover:bg-white/[0.08] hover:text-mist"
+            title="Add to playlist"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onDownload(track)}
+            disabled={isBusy}
+            className={`relative rounded-xl border p-2 transition ${
+              isDownloaded
+                ? 'border-signal/40 bg-signal/10 text-signal'
+                : isBusy
+                  ? 'cursor-wait border-white/10 bg-white/[0.03] text-ink-400 opacity-70'
+                  : 'border-white/10 bg-white/[0.04] text-ink-300 hover:border-ember/40 hover:text-ember'
+            }`}
+            title={
+              isDownloaded
+                ? 'Available offline'
+                : isBusy
+                  ? `Downloading… ${downloadTask?.progress ?? 0}%`
+                  : 'Cache for offline'
+            }
+          >
+            {isBusy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isDownloaded ? (
+              <Check className="h-4 w-4" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
           </button>
         </div>
       </div>
-
-      {/* Track Meta Details */}
-      <div>
-        <h3 className="font-bold text-base text-white truncate group-hover:text-purple-300 transition-colors">
-          {track.title}
-        </h3>
-        <p className="text-xs text-slate-400 truncate mb-2">{track.artist}</p>
-
-        <div className="flex items-center gap-2 text-[11px] text-slate-500 mb-4">
-          <span className="flex items-center gap-1 font-mono uppercase bg-slate-900/60 px-1.5 py-0.5 rounded border border-white/5">
-            <Disc className="w-3 h-3 text-purple-400" /> {track.format}
-          </span>
-          <span>•</span>
-          <span className="font-mono">{track.bitrate} kbps</span>
-        </div>
-      </div>
-
-      {/* Action buttons */}
-      <div className="flex items-center gap-2 pt-2 border-t border-white/5">
-        <button
-          onClick={() => onPlay(track)}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold transition-all ${
-            isPlaying
-              ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/30'
-              : 'bg-slate-900/80 hover:bg-slate-800 text-slate-200 border border-white/10'
-          }`}
-        >
-          {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-          <span>{isPlaying ? 'Playing' : 'Stream'}</span>
-        </button>
-
-        <button
-          onClick={() => onAddToPlaylist(track)}
-          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-white/10 transition"
-          title="Add to playlist"
-        >
-          <Plus className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={() => onDownload(track)}
-          className="p-2 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-cyan-400 hover:text-cyan-300 border border-white/10 transition"
-          title="Download offline task"
-        >
-          <Download className="w-4 h-4" />
-        </button>
-      </div>
-    </div>
+    </article>
   );
 }
