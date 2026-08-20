@@ -48,14 +48,22 @@ export default function PlayerBar({
 }: PlayerBarProps) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const offlineIdsRef = useRef(offlineTrackIds);
+  const isPlayingRef = useRef(isPlaying);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(60);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
 
+  offlineIdsRef.current = offlineTrackIds;
+  isPlayingRef.current = isPlaying;
+
+  // Only reload the audio element when the track changes — not when a background
+  // download finishes and offlineTrackIds updates (that was restarting playback).
   useEffect(() => {
     if (!audioRef.current || !currentTrack) return;
     let cancelled = false;
+    const trackId = currentTrack.id;
 
     const load = async () => {
       if (objectUrlRef.current) {
@@ -63,25 +71,26 @@ export default function PlayerBar({
         objectUrlRef.current = null;
       }
 
-      let src = `${API_BASE}/media/stream?id=${currentTrack.id}`;
-      if (offlineTrackIds?.has(currentTrack.id) || !navigator.onLine) {
-        const offlineUrl = await getOfflineObjectUrl(currentTrack.id);
+      let src = `${API_BASE}/media/stream?id=${trackId}`;
+      const offlineIds = offlineIdsRef.current;
+      if (offlineIds?.has(trackId) || !navigator.onLine) {
+        const offlineUrl = await getOfflineObjectUrl(trackId);
         if (offlineUrl) {
           objectUrlRef.current = offlineUrl;
           src = offlineUrl;
         } else if (!navigator.onLine) {
           return;
         } else {
-          void prefetchTracks([currentTrack.id]);
+          void prefetchTracks([trackId]);
         }
       } else {
-        void prefetchTracks([currentTrack.id]);
+        void prefetchTracks([trackId]);
       }
 
       if (cancelled || !audioRef.current) return;
       audioRef.current.src = src;
       setCurrentTime(0);
-      if (isPlaying) {
+      if (isPlayingRef.current) {
         audioRef.current.play().catch(console.error);
       }
     };
@@ -90,7 +99,7 @@ export default function PlayerBar({
     return () => {
       cancelled = true;
     };
-  }, [currentTrack, offlineTrackIds]);
+  }, [currentTrack?.id]);
 
   useEffect(() => {
     if (!audioRef.current) return;
