@@ -9,6 +9,8 @@ import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
 import DownloadDrawer from './components/DownloadDrawer';
 import PlaylistPicker from './components/PlaylistPicker';
+import PlaylistDetail, { PlaylistRow } from './components/PlaylistDetail';
+import SearchResults from './components/SearchResults';
 import QueueDrawer from './components/QueueDrawer';
 import {
   API_BASE,
@@ -51,7 +53,7 @@ export default function Home() {
   const [showQueue, setShowQueue] = useState(false);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
-  const [playlistTracks, setPlaylistTracks] = useState<MediaItem[]>([]);
+  const [playlistRows, setPlaylistRows] = useState<PlaylistRow[]>([]);
   const [loadingPlaylistTracks, setLoadingPlaylistTracks] = useState(false);
   const [history, setHistory] = useState<PlayHistory[]>([]);
   const [downloads, setDownloads] = useState<DownloadTask[]>([]);
@@ -70,6 +72,7 @@ export default function Home() {
   const currentTrack = queueState.tracks[queueState.index] ?? null;
   const canSkipPrev = queueState.index > 0;
   const canSkipNext = queueState.index < queueState.tracks.length - 1;
+  const playlistTracks = useMemo(() => playlistRows.map((r) => r.track), [playlistRows]);
 
   const downloadsByTrack = useMemo(() => latestDownloadByTrack(downloads), [downloads]);
 
@@ -167,7 +170,7 @@ export default function Home() {
     clearUserLocalCache();
     setActiveTab('player');
     setSelectedPlaylistId(null);
-    setPlaylistTracks([]);
+    setPlaylistRows([]);
     setPlaylists([]);
     setDownloads([]);
   };
@@ -176,17 +179,18 @@ export default function Home() {
     setActiveTab(tab);
     if (tab !== 'playlists') {
       setSelectedPlaylistId(null);
-      setPlaylistTracks([]);
+      setPlaylistRows([]);
     } else {
       setSelectedPlaylistId(null);
-      setPlaylistTracks([]);
+      setPlaylistRows([]);
     }
   };
 
   const loadPlaylistTracks = useCallback(
     async (playlistId: string) => {
       if (!token) {
-        setPlaylistTracks(readCachedPlaylistTracks(playlistId));
+        const cached = readCachedPlaylistTracks(playlistId);
+        setPlaylistRows(cached.map((track) => ({ track })));
         return;
       }
       setLoadingPlaylistTracks(true);
@@ -196,15 +200,26 @@ export default function Home() {
           token
         );
         const items = Array.isArray(data?.items) ? data.items : [];
-        const tracks: MediaItem[] = items
-          .map((item: { track?: MediaItem; track_id?: string }) => item.track)
-          .filter((t: MediaItem | undefined): t is MediaItem => !!t);
-        setPlaylistTracks(tracks);
-        cachePlaylistTracks(playlistId, tracks);
-        void prefetchTracks(tracks.map((t) => t.id));
+        const rows: PlaylistRow[] = items
+          .map((item: { track?: MediaItem; added_at?: string }) =>
+            item.track
+              ? {
+                  track: item.track,
+                  addedAt: item.added_at,
+                }
+              : null,
+          )
+          .filter((row: PlaylistRow | null): row is PlaylistRow => !!row);
+        setPlaylistRows(rows);
+        cachePlaylistTracks(
+          playlistId,
+          rows.map((r) => r.track),
+        );
+        void prefetchTracks(rows.map((r) => r.track.id));
       } catch (err) {
         console.error('Failed to load playlist tracks:', err);
-        setPlaylistTracks(readCachedPlaylistTracks(playlistId));
+        const cached = readCachedPlaylistTracks(playlistId);
+        setPlaylistRows(cached.map((track) => ({ track })));
       } finally {
         setLoadingPlaylistTracks(false);
       }
@@ -777,48 +792,21 @@ export default function Home() {
 
         <main className="w-full px-3 pb-player pt-[7.25rem] sm:px-7 lg:px-8 lg:pt-[7.5rem]">
         {activeTab === 'player' && (
-          <div className="space-y-6 lg:space-y-10">
-            <section>
-              <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
-                <div>
-                  <h2 className="font-display text-xl font-bold text-mist sm:text-2xl">
-                    {searchResults.length > 0 ? 'Search results' : 'Start searching'}
-                  </h2>
-                  <p className="mt-1 text-xs text-ink-400 sm:text-sm">
-                    {searchResults.length > 0
-                      ? `${searchResults.length} tracks ready to stream`
-                      : 'Type a song or artist above to fill this list'}
-                  </p>
-                </div>
-              </div>
-
-              {searchResults.length === 0 && !isSearching ? (
-                <div className="surface flex flex-col items-center justify-center rounded-[1.25rem] px-5 py-12 text-center sm:rounded-[1.5rem] sm:px-6 sm:py-16">
-                  <Search className="mb-4 h-10 w-10 text-ink-600 sm:h-12 sm:w-12" />
-                  <p className="font-display text-base font-semibold text-ink-300 sm:text-lg">No results yet</p>
-                  <p className="mt-2 max-w-sm text-xs text-ink-500 sm:text-sm">
-                    Try “jazz”, “lofi”, or an artist name — results warm up in the background as they appear.
-                  </p>
-                </div>
-              ) : (
-                <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-                  {searchResults.map((track) => (
-                    <TrackCard
-                      key={track.id}
-                      track={track}
-                      isPlaying={currentTrack?.id === track.id && isPlaying}
-                      downloadTask={downloadsByTrack[track.id]}
-                      isOfflineReady={offlineTrackIds.has(track.id)}
-                      onPlay={handlePlay}
-                      onDownload={handleDownload}
-                      onAddToPlaylist={handleAddToPlaylist}
-                      onAddToQueue={handleAddToQueue}
-                    />
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
+          <SearchResults
+            query={searchQuery}
+            results={searchResults}
+            isSearching={isSearching}
+            currentTrackId={currentTrack?.id}
+            isPlaying={isPlaying}
+            downloadsByTrack={downloadsByTrack}
+            offlineTrackIds={offlineTrackIds}
+            onPlayAll={playQueue}
+            onTogglePlay={() => setIsPlaying((v) => !v)}
+            onPlayTrack={handlePlay}
+            onDownloadTrack={handleDownload}
+            onAddToQueue={handleAddToQueue}
+            onAddToPlaylist={handleAddToPlaylist}
+          />
         )}
 
         {activeTab === 'downloads' && (
@@ -889,55 +877,7 @@ export default function Home() {
         )}
 
         {activeTab === 'playlists' && (
-          <div className="space-y-6 animate-rise-in">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <ListMusic className="h-7 w-7 shrink-0 text-signal" />
-                <h1 className="truncate font-display text-2xl font-bold text-mist sm:text-3xl">
-                  {selectedPlaylist ? selectedPlaylist.name : 'Your Playlists'}
-                </h1>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedPlaylist && playlistTracks.length > 0 && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => playQueue(playlistTracks)}
-                      className="btn-signal rounded-xl px-4 py-2 text-sm"
-                    >
-                      Play all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void queuePlaylistDownloads(selectedPlaylistId)}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-signal/35 bg-signal/10 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal/20"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download all
-                    </button>
-                  </>
-                )}
-                {!selectedPlaylist && token && playlists.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => void queuePlaylistDownloads(null)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-signal/35 bg-signal/10 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal/20"
-                  >
-                    <Download className="h-4 w-4" />
-                    Download all playlists
-                  </button>
-                )}
-                {selectedPlaylist && (
-                  <button
-                    type="button"
-                    onClick={() => changeTab('playlists')}
-                    className="text-sm text-ink-400 transition hover:text-mist"
-                  >
-                    ← All playlists
-                  </button>
-                )}
-              </div>
-            </div>
+          <div className="animate-rise-in">
             {!token ? (
               <div className="surface rounded-[1.5rem] px-6 py-14 text-center">
                 <p className="text-ink-400">Sign in to view and manage playlists</p>
@@ -949,48 +889,74 @@ export default function Home() {
                   Sign In
                 </button>
               </div>
-            ) : selectedPlaylistId ? (
-              loadingPlaylistTracks ? (
-                <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">Loading tracks...</div>
-              ) : playlistTracks.length === 0 ? (
-                <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
-                  This playlist is empty. Add tracks from search.
-                </div>
-              ) : (
-                <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-                  {playlistTracks.map((track) => (
-                    <TrackCard
-                      key={track.id}
-                      track={track}
-                      isPlaying={currentTrack?.id === track.id && isPlaying}
-                      downloadTask={downloadsByTrack[track.id]}
-                      isOfflineReady={offlineTrackIds.has(track.id)}
-                      onPlay={handlePlay}
-                      onDownload={handleDownload}
-                      onAddToPlaylist={handleAddToPlaylist}
-                      onAddToQueue={handleAddToQueue}
-                    />
-                  ))}
-                </div>
-              )
-            ) : playlists.length === 0 ? (
-              <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
-                No playlists yet. Add tracks from search results.
-              </div>
+            ) : selectedPlaylist ? (
+              <PlaylistDetail
+                playlist={selectedPlaylist}
+                rows={playlistRows}
+                user={user}
+                loading={loadingPlaylistTracks}
+                currentTrackId={currentTrack?.id}
+                isPlaying={isPlaying}
+                downloadsByTrack={downloadsByTrack}
+                offlineTrackIds={offlineTrackIds}
+                onBack={() => changeTab('playlists')}
+                onPlayAll={playQueue}
+                onTogglePlay={() => setIsPlaying((v) => !v)}
+                onPlayTrack={(track) => {
+                  const idx = playlistTracks.findIndex((t) => t.id === track.id);
+                  if (idx >= 0) playQueue(playlistTracks, idx);
+                  else handlePlay(track);
+                }}
+                onDownloadAll={() => void queuePlaylistDownloads(selectedPlaylistId)}
+                onDownloadTrack={handleDownload}
+              />
             ) : (
-              <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {playlists.map((pl) => (
-                  <button
-                    key={pl.id}
-                    type="button"
-                    onClick={() => openPlaylist(pl.id)}
-                    className="surface rounded-2xl p-5 text-left transition hover:border-signal/35 hover:bg-ink-800/50"
-                  >
-                    <h3 className="font-display text-lg font-bold text-mist">{pl.name}</h3>
-                    <p className="mt-1 text-xs text-ink-400">{pl.description || 'No description'}</p>
-                    <p className="mt-4 font-mono text-sm text-signal">{pl.item_count} tracks</p>
-                  </button>
-                ))}
+              <div className="space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <ListMusic className="h-7 w-7 shrink-0 text-signal" />
+                    <h1 className="truncate font-display text-2xl font-bold text-mist sm:text-3xl">
+                      Your Playlists
+                    </h1>
+                  </div>
+                  {token && playlists.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void queuePlaylistDownloads(null)}
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-signal/35 bg-signal/10 px-4 py-2 text-sm font-semibold text-signal transition hover:bg-signal/20"
+                    >
+                      <Download className="h-4 w-4" />
+                      Download all playlists
+                    </button>
+                  )}
+                </div>
+                {playlists.length === 0 ? (
+                  <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
+                    No playlists yet. Add tracks from search results.
+                  </div>
+                ) : (
+                  <div className="stagger grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {playlists.map((pl) => (
+                      <button
+                        key={pl.id}
+                        type="button"
+                        onClick={() => openPlaylist(pl.id)}
+                        className="surface rounded-2xl p-5 text-left transition hover:border-signal/35 hover:bg-ink-800/50"
+                      >
+                        <div className="mb-4 flex h-28 w-full items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-signal/25 via-ink-800 to-ember/20">
+                          {pl.cover_url ? (
+                            <img src={pl.cover_url} alt="" className="h-full w-full object-cover" />
+                          ) : (
+                            <ListMusic className="h-10 w-10 text-signal/80" />
+                          )}
+                        </div>
+                        <h3 className="font-display text-lg font-bold text-mist">{pl.name}</h3>
+                        <p className="mt-1 text-xs text-ink-400">{pl.description || 'No description'}</p>
+                        <p className="mt-4 font-mono text-sm text-signal">{pl.item_count} tracks</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
