@@ -16,11 +16,13 @@ import { Playlist, User as UserType } from '../lib/api';
 
 interface NavbarProps {
   user: UserType | null;
-  activeTab: 'player' | 'admin' | 'playlists' | 'history';
-  setActiveTab: (tab: 'player' | 'admin' | 'playlists' | 'history') => void;
+  activeTab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads';
+  setActiveTab: (tab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads') => void;
   playlists: Playlist[];
   selectedPlaylistId: string | null;
   onSelectPlaylist: (playlistId: string) => void;
+  downloadedTracks: { id: string; title: string; artist: string }[];
+  onSelectDownload: (trackId: string) => void;
   onOpenAuth: () => void;
   onOpenDownloads: () => void;
   onLogout: () => void;
@@ -34,6 +36,8 @@ export default function Navbar({
   playlists,
   selectedPlaylistId,
   onSelectPlaylist,
+  downloadedTracks,
+  onSelectDownload,
   onOpenAuth,
   onOpenDownloads,
   onLogout,
@@ -75,6 +79,42 @@ export default function Navbar({
             <Radio className="h-4 w-4" />
             <span>Stream</span>
           </button>
+
+          <p className="mb-1 mt-4 hidden px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-500 lg:block">
+            Library
+          </p>
+          <button
+            type="button"
+            onClick={() => setActiveTab('downloads')}
+            className={navBtn(activeTab === 'downloads')}
+          >
+            <Download className="h-4 w-4" />
+            <span className="whitespace-nowrap">Downloads</span>
+            {downloadedTracks.length > 0 && (
+              <span className="ml-auto hidden font-mono text-[10px] opacity-70 lg:inline">
+                {downloadedTracks.length}
+              </span>
+            )}
+          </button>
+
+          <div className="hidden lg:flex lg:max-h-40 lg:flex-col lg:gap-0.5 lg:overflow-y-auto lg:px-1">
+            {downloadedTracks.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-ink-500">No downloads yet</p>
+            ) : (
+              downloadedTracks.map((track) => (
+                <button
+                  key={track.id}
+                  type="button"
+                  onClick={() => onSelectDownload(track.id)}
+                  className="w-full truncate rounded-xl px-3 py-2 text-left text-sm text-ink-400 transition hover:bg-white/[0.04] hover:text-mist"
+                  title={`${track.title} — ${track.artist}`}
+                >
+                  <span className="block truncate">{track.title}</span>
+                  <span className="block truncate text-[10px] text-ink-500">{track.artist}</span>
+                </button>
+              ))
+            )}
+          </div>
 
           <p className="mb-1 mt-4 hidden px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-ink-500 lg:block">
             Playlists
@@ -147,10 +187,10 @@ export default function Navbar({
             type="button"
             onClick={onOpenDownloads}
             className="relative flex items-center gap-2 rounded-xl border border-white/[0.06] bg-ink-900/70 p-2.5 text-ink-200 transition hover:border-signal/40 hover:text-signal lg:w-full lg:px-3"
-            title="Offline library"
+            title="Download queue"
           >
             <Download className="h-4 w-4 text-signal" />
-            <span className="hidden text-xs font-semibold lg:inline">Offline library</span>
+            <span className="hidden text-xs font-semibold lg:inline">Download queue</span>
             {pendingDownloadsCount > 0 && (
               <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-ember px-1 text-[10px] font-bold text-white">
                 {pendingDownloadsCount}

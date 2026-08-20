@@ -33,8 +33,6 @@ import {
   readCachedPlaylists,
 } from './lib/localCache';
 
-const CATEGORIES = ['All', 'Music', 'Podcasts', 'Jazz', 'Electronic', 'Rock', 'Hip Hop'];
-
 type QueueState = {
   tracks: MediaItem[];
   index: number;
@@ -43,9 +41,8 @@ type QueueState = {
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'player' | 'admin' | 'playlists' | 'history'>('player');
+  const [activeTab, setActiveTab] = useState<'player' | 'admin' | 'playlists' | 'history' | 'downloads'>('player');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
   const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [queueState, setQueueState] = useState<QueueState>({ tracks: [], index: 0 });
@@ -72,6 +69,54 @@ export default function Home() {
   const canSkipNext = queueState.index < queueState.tracks.length - 1;
 
   const downloadsByTrack = useMemo(() => latestDownloadByTrack(downloads), [downloads]);
+
+  const downloadedLibrary = useMemo(() => {
+    const byId = new Map<string, MediaItem>();
+
+    for (const task of downloads) {
+      if (task.status !== 'completed') continue;
+      const videoId = task.track_id.startsWith('yt_') ? task.track_id.slice(3) : '';
+      byId.set(task.track_id, {
+        id: task.track_id,
+        title: task.title || task.track_id,
+        artist: task.artist || 'Unknown',
+        album: 'Downloads',
+        duration: 0,
+        bitrate: 0,
+        format: task.format || 'm4a',
+        source: (task.source as MediaItem['source']) || 'youtube',
+        source_url: task.source_url || (videoId ? `https://www.youtube.com/watch?v=${videoId}` : ''),
+        thumbnail_url: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '',
+        file_size: task.file_size || 0,
+        created_at: task.completed_at || task.created_at,
+      });
+    }
+
+    for (const offline of offlineTracks) {
+      if (byId.has(offline.trackId)) continue;
+      const videoId = offline.trackId.startsWith('yt_') ? offline.trackId.slice(3) : '';
+      byId.set(offline.trackId, {
+        id: offline.trackId,
+        title: offline.title || offline.trackId,
+        artist: offline.artist || 'Unknown',
+        album: 'Downloads',
+        duration: 0,
+        bitrate: 0,
+        format: 'm4a',
+        source: offline.trackId.startsWith('yt_')
+          ? 'youtube'
+          : offline.trackId.startsWith('gdrive_')
+            ? 'gdrive'
+            : 'local',
+        source_url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : '',
+        thumbnail_url: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '',
+        file_size: offline.size || 0,
+        created_at: new Date(offline.cachedAt).toISOString(),
+      });
+    }
+
+    return Array.from(byId.values()).sort((a, b) => a.title.localeCompare(b.title));
+  }, [downloads, offlineTracks]);
 
   const refreshOfflineIds = useCallback(async () => {
     const [ids, tracks] = await Promise.all([listOfflineTrackIds(), listOfflineTracks()]);
@@ -114,7 +159,7 @@ export default function Home() {
     setDownloads([]);
   };
 
-  const changeTab = (tab: 'player' | 'admin' | 'playlists' | 'history') => {
+  const changeTab = (tab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads') => {
     setActiveTab(tab);
     if (tab !== 'playlists') {
       setSelectedPlaylistId(null);
@@ -165,13 +210,15 @@ export default function Home() {
 
   const performSearch = useCallback(async () => {
     if (!searchQuery.trim()) return;
+    setActiveTab('player');
+    setSelectedPlaylistId(null);
     setIsSearching(true);
     try {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) headers['Authorization'] = `Bearer ${token}`;
 
       const res = await fetch(
-        `${API_BASE}/media/search?q=${encodeURIComponent(searchQuery)}&category=${encodeURIComponent(activeCategory)}`,
+        `${API_BASE}/media/search?q=${encodeURIComponent(searchQuery)}`,
         { headers }
       );
       if (res.ok) {
@@ -185,7 +232,7 @@ export default function Home() {
     } finally {
       setIsSearching(false);
     }
-  }, [searchQuery, activeCategory, token]);
+  }, [searchQuery, token]);
 
   const loadPlaylists = useCallback(async () => {
     if (!token) {
@@ -395,6 +442,13 @@ export default function Home() {
     setIsPlaying(true);
   };
 
+  const playDownloadedTrack = (trackId: string) => {
+    const track = downloadedLibrary.find((t) => t.id === trackId);
+    if (!track) return;
+    setActiveTab('downloads');
+    handlePlay(track);
+  };
+
   const handleAddToQueue = (track: MediaItem) => {
     let startPlayback = false;
     setQueueState((prev) => {
@@ -563,6 +617,12 @@ export default function Home() {
         playlists={playlists}
         selectedPlaylistId={selectedPlaylistId}
         onSelectPlaylist={openPlaylist}
+        downloadedTracks={downloadedLibrary.map((t) => ({
+          id: t.id,
+          title: t.title,
+          artist: t.artist,
+        }))}
+        onSelectDownload={playDownloadedTrack}
         onOpenAuth={() => setShowAuth(true)}
         onOpenDownloads={() => setShowDownloads(true)}
         onLogout={handleLogout}
@@ -570,48 +630,33 @@ export default function Home() {
       />
 
       <div className="app-content min-h-[100dvh] lg:pl-[17.5rem]">
-        <main className="w-full px-4 pb-player pt-[4.75rem] sm:px-6 lg:px-8 lg:pt-7">
+        <div className="fixed left-0 right-0 top-[4.75rem] z-30 border-b border-white/[0.06] bg-ink-950/85 px-4 py-3 backdrop-blur-xl sm:px-6 lg:left-[17.5rem] lg:top-0 lg:px-8 lg:py-4">
+          <div className="mx-auto flex w-full max-w-none flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-500" />
+              <input
+                type="text"
+                placeholder="Search tracks, artists, albums..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && void performSearch()}
+                className="field w-full rounded-2xl py-3 pl-12 pr-4 text-sm sm:py-3.5 sm:text-base"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => void performSearch()}
+              disabled={isSearching}
+              className="btn-signal shrink-0 rounded-2xl px-7 py-3 text-sm sm:py-3.5 sm:text-base"
+            >
+              {isSearching ? 'Searching…' : 'Search'}
+            </button>
+          </div>
+        </div>
+
+        <main className="w-full px-4 pb-player pt-[9.5rem] sm:px-6 lg:px-8 lg:pt-[5.75rem]">
         {activeTab === 'player' && (
           <div className="space-y-8 lg:space-y-10">
-            <section className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="relative flex-1">
-                <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-500" />
-                <input
-                  type="text"
-                  placeholder="Search tracks, artists, albums..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && performSearch()}
-                  className="field w-full rounded-2xl py-3.5 pl-12 pr-4 text-sm sm:text-base"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={performSearch}
-                disabled={isSearching}
-                className="btn-signal shrink-0 rounded-2xl px-7 py-3.5 text-sm sm:text-base"
-              >
-                {isSearching ? 'Searching…' : 'Search'}
-              </button>
-            </section>
-
-            <section className="space-y-4">
-              <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {CATEGORIES.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setActiveCategory(cat)}
-                    className={`chip shrink-0 rounded-xl px-4 py-2 text-sm font-medium ${
-                      activeCategory === cat ? 'chip-active' : ''
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
-              </div>
-            </section>
-
             <section>
               <div className="mb-5 flex items-end justify-between gap-3">
                 <div>
@@ -652,6 +697,73 @@ export default function Home() {
                 </div>
               )}
             </section>
+          </div>
+        )}
+
+        {activeTab === 'downloads' && (
+          <div className="space-y-6 animate-rise-in">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <Download className="h-7 w-7 shrink-0 text-signal" />
+                <div>
+                  <h1 className="font-display text-2xl font-bold text-mist sm:text-3xl">Downloads</h1>
+                  <p className="mt-1 text-sm text-ink-400">
+                    {downloadedLibrary.length > 0
+                      ? `${downloadedLibrary.length} songs ready offline`
+                      : 'Completed downloads show up here'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {downloadedLibrary.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => playQueue(downloadedLibrary)}
+                    className="btn-signal rounded-xl px-4 py-2 text-sm"
+                  >
+                    Play all
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowDownloads(true)}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-ink-300 transition hover:border-signal/35 hover:text-signal"
+                >
+                  Download queue
+                  {pendingCount > 0 && (
+                    <span className="rounded-full bg-ember px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {downloadedLibrary.length === 0 ? (
+              <div className="surface flex flex-col items-center justify-center rounded-[1.5rem] px-6 py-16 text-center">
+                <Download className="mb-4 h-12 w-12 text-ink-600" />
+                <p className="font-display text-lg font-semibold text-ink-300">No downloads yet</p>
+                <p className="mt-2 max-w-sm text-sm text-ink-500">
+                  Download tracks from search or playlists — they will appear in this library.
+                </p>
+              </div>
+            ) : (
+              <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {downloadedLibrary.map((track) => (
+                  <TrackCard
+                    key={track.id}
+                    track={track}
+                    isPlaying={currentTrack?.id === track.id && isPlaying}
+                    downloadTask={downloadsByTrack[track.id]}
+                    isOfflineReady={offlineTrackIds.has(track.id) || downloadsByTrack[track.id]?.status === 'completed'}
+                    onPlay={handlePlay}
+                    onDownload={handleDownload}
+                    onAddToPlaylist={handleAddToPlaylist}
+                    onAddToQueue={handleAddToQueue}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         )}
 

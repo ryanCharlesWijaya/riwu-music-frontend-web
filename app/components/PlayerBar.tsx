@@ -14,7 +14,7 @@ import {
   Video,
   ListMusic,
 } from 'lucide-react';
-import { MediaItem, API_BASE, prefetchTracks } from '../lib/api';
+import { MediaItem, API_BASE, prefetchTracks, waitForStreamReady } from '../lib/api';
 import { getOfflineObjectUrl } from '../lib/offlineStore';
 
 interface PlayerBarProps {
@@ -82,9 +82,12 @@ export default function PlayerBar({
           return;
         } else {
           void prefetchTracks([trackId]);
+          // Brief wait so warm/kkdai can populate cache (~1s typical).
+          await waitForStreamReady(trackId, 2000);
         }
-      } else {
+      } else if (trackId.startsWith('yt_')) {
         void prefetchTracks([trackId]);
+        await waitForStreamReady(trackId, 2000);
       }
 
       if (cancelled || !audioRef.current) return;
