@@ -442,13 +442,6 @@ export default function Home() {
     setIsPlaying(true);
   };
 
-  const playDownloadedTrack = (trackId: string) => {
-    const track = downloadedLibrary.find((t) => t.id === trackId);
-    if (!track) return;
-    setActiveTab('downloads');
-    handlePlay(track);
-  };
-
   const handleAddToQueue = (track: MediaItem) => {
     let startPlayback = false;
     setQueueState((prev) => {
@@ -617,12 +610,7 @@ export default function Home() {
         playlists={playlists}
         selectedPlaylistId={selectedPlaylistId}
         onSelectPlaylist={openPlaylist}
-        downloadedTracks={downloadedLibrary.map((t) => ({
-          id: t.id,
-          title: t.title,
-          artist: t.artist,
-        }))}
-        onSelectDownload={playDownloadedTrack}
+        downloadsCount={downloadedLibrary.length}
         onOpenAuth={() => setShowAuth(true)}
         onOpenDownloads={() => setShowDownloads(true)}
         onLogout={handleLogout}
@@ -654,7 +642,7 @@ export default function Home() {
           </div>
         </div>
 
-        <main className="w-full px-4 pb-player pt-[9.5rem] sm:px-6 lg:px-8 lg:pt-[5.75rem]">
+        <main className="w-full px-4 pb-player pt-[11rem] sm:px-6 lg:px-8 lg:pt-[7.5rem]">
         {activeTab === 'player' && (
           <div className="space-y-8 lg:space-y-10">
             <section>
