@@ -100,6 +100,24 @@ export async function cacheOfflineTrack(input: {
   }
 }
 
+export async function updateOfflineTrackMeta(
+  trackId: string,
+  meta: { title?: string; artist?: string },
+): Promise<void> {
+  const db = await openDb();
+  try {
+    const tx = db.transaction(STORE, 'readwrite');
+    const store = tx.objectStore(STORE);
+    const record = (await reqToPromise(store.get(trackId))) as OfflineRecord | undefined;
+    if (!record) return;
+    if (meta.title) record.title = meta.title;
+    if (meta.artist) record.artist = meta.artist;
+    await reqToPromise(store.put(record));
+  } finally {
+    db.close();
+  }
+}
+
 export async function removeOfflineTrack(trackId: string): Promise<void> {
   const db = await openDb();
   try {

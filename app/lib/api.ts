@@ -1,4 +1,4 @@
-import { cacheOfflineTrack, hasOfflineTrack } from './offlineStore';
+import { cacheOfflineTrack, hasOfflineTrack, updateOfflineTrackMeta } from './offlineStore';
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api';
 
@@ -151,10 +151,20 @@ export async function fetchWithAuth(url: string, token: string | null, options: 
  * play it offline — no Save As dialog, no visible Downloads folder entry.
  */
 export async function cacheDownloadForOffline(task: DownloadTask, token: string | null) {
-  if (await hasOfflineTrack(task.track_id)) return;
+  const realTitle = task.title && !task.title.toLowerCase().startsWith('youtube audio track');
+  if (await hasOfflineTrack(task.track_id)) {
+    if (realTitle) {
+      await updateOfflineTrackMeta(task.track_id, {
+        title: task.title,
+        artist: task.artist || undefined,
+      });
+    }
+    return;
+  }
 
   const filename = task.target_path.split('/').pop() || `${task.track_id}.m4a`;
   const params = new URLSearchParams({ track_id: task.track_id });
+  if (task.title) params.set('title', task.title);
   const headers: Record<string, string> = {};
   if (token) headers['Authorization'] = `Bearer ${token}`;
 

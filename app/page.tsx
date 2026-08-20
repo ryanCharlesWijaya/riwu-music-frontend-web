@@ -22,7 +22,7 @@ import {
   latestDownloadByTrack,
   prefetchTracks,
 } from './lib/api';
-import { listOfflineTrackIds, listOfflineTracks, OfflineTrackMeta } from './lib/offlineStore';
+import { listOfflineTrackIds, listOfflineTracks, OfflineTrackMeta, updateOfflineTrackMeta } from './lib/offlineStore';
 import {
   cacheDownloads,
   cachePlaylistTracks,
@@ -291,6 +291,19 @@ export default function Home() {
       const list = Array.isArray(data) ? data : [];
       setDownloads(list);
       cacheDownloads(list);
+      // Keep offline IndexedDB titles in sync with real YouTube names.
+      for (const task of list) {
+        if (
+          task.status === 'completed' &&
+          task.title &&
+          !String(task.title).toLowerCase().startsWith('youtube audio track')
+        ) {
+          void updateOfflineTrackMeta(task.track_id, {
+            title: task.title,
+            artist: task.artist || undefined,
+          });
+        }
+      }
     } catch (err) {
       console.error('Failed to load downloads:', err);
       setDownloads(readCachedDownloads());
