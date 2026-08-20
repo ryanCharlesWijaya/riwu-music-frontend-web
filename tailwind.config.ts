@@ -24,9 +24,9 @@ const config: Config = {
           950: '#0B0D10',
         },
         signal: {
-          DEFAULT: '#D6FF3F',
-          dim: '#A8CC2A',
-          soft: 'rgba(214, 255, 63, 0.14)',
+          DEFAULT: '#38BDF8',
+          dim: '#06B6D4',
+          soft: 'rgba(56, 189, 248, 0.14)',
         },
         ember: {
           DEFAULT: '#FF5C3A',
@@ -41,7 +41,7 @@ const config: Config = {
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
         'signal-mesh':
-          'radial-gradient(ellipse 80% 60% at 10% 0%, rgba(214,255,63,0.12), transparent 55%), radial-gradient(ellipse 70% 50% at 90% 20%, rgba(255,92,58,0.10), transparent 50%), radial-gradient(ellipse 60% 40% at 50% 100%, rgba(70,140,160,0.08), transparent 55%)',
+          'radial-gradient(ellipse 80% 60% at 10% 0%, rgba(56,189,248,0.14), transparent 55%), radial-gradient(ellipse 70% 50% at 90% 20%, rgba(255,92,58,0.08), transparent 50%), radial-gradient(ellipse 60% 40% at 50% 100%, rgba(14,165,233,0.1), transparent 55%)',
       },
       boxShadow: {
         panel: '0 1px 0 rgba(255,255,255,0.04) inset, 0 18px 40px rgba(0,0,0,0.35)',
