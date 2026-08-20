@@ -631,57 +631,57 @@ export default function Home() {
       />
 
       <div className="app-content min-h-[100dvh] lg:pl-[17.5rem]">
-        <div className="fixed left-0 right-0 top-[4.75rem] z-30 border-b border-white/[0.06] bg-ink-950/85 px-4 py-3 backdrop-blur-xl sm:px-6 lg:left-[17.5rem] lg:top-0 lg:px-8 lg:py-4">
-          <div className="mx-auto flex w-full max-w-none flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-ink-500" />
+        <div className="fixed left-0 right-0 top-[3.5rem] z-30 border-b border-white/[0.06] bg-ink-950/90 px-3 py-2.5 backdrop-blur-xl sm:px-4 lg:left-[17.5rem] lg:top-0 lg:px-8 lg:py-4">
+          <div className="mx-auto flex w-full max-w-none items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-500 sm:left-4 sm:h-5 sm:w-5" />
               <input
                 type="text"
-                placeholder="Search tracks, artists, albums..."
+                placeholder="Search songs or artists…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && void performSearch()}
-                className="field w-full rounded-2xl py-3 pl-12 pr-4 text-sm sm:py-3.5 sm:text-base"
+                className="field w-full rounded-xl py-2.5 pl-10 pr-3 text-sm sm:rounded-2xl sm:py-3.5 sm:pl-12 sm:pr-4 sm:text-base"
               />
             </div>
             <button
               type="button"
               onClick={() => void performSearch()}
               disabled={isSearching}
-              className="btn-signal shrink-0 rounded-2xl px-7 py-3 text-sm sm:py-3.5 sm:text-base"
+              className="btn-signal shrink-0 rounded-xl px-4 py-2.5 text-sm sm:rounded-2xl sm:px-7 sm:py-3.5 sm:text-base"
             >
-              {isSearching ? 'Searching…' : 'Search'}
+              {isSearching ? '…' : 'Search'}
             </button>
           </div>
         </div>
 
-        <main className="w-full px-4 pb-player pt-[11rem] sm:px-6 lg:px-8 lg:pt-[7.5rem]">
+        <main className="w-full px-3 pb-player pt-[7.25rem] sm:px-6 lg:px-8 lg:pt-[7.5rem]">
         {activeTab === 'player' && (
-          <div className="space-y-8 lg:space-y-10">
+          <div className="space-y-6 lg:space-y-10">
             <section>
-              <div className="mb-5 flex items-end justify-between gap-3">
+              <div className="mb-4 flex items-end justify-between gap-3 sm:mb-5">
                 <div>
-                  <h2 className="font-display text-2xl font-bold text-mist">
+                  <h2 className="font-display text-xl font-bold text-mist sm:text-2xl">
                     {searchResults.length > 0 ? 'Search results' : 'Start searching'}
                   </h2>
-                  <p className="mt-1 text-sm text-ink-400">
+                  <p className="mt-1 text-xs text-ink-400 sm:text-sm">
                     {searchResults.length > 0
                       ? `${searchResults.length} tracks ready to stream`
-                      : 'Type a song or artist above to fill this grid'}
+                      : 'Type a song or artist above to fill this list'}
                   </p>
                 </div>
               </div>
 
               {searchResults.length === 0 && !isSearching ? (
-                <div className="surface flex flex-col items-center justify-center rounded-[1.5rem] px-6 py-16 text-center">
-                  <Search className="mb-4 h-12 w-12 text-ink-600" />
-                  <p className="font-display text-lg font-semibold text-ink-300">No results yet</p>
-                  <p className="mt-2 max-w-sm text-sm text-ink-500">
+                <div className="surface flex flex-col items-center justify-center rounded-[1.25rem] px-5 py-12 text-center sm:rounded-[1.5rem] sm:px-6 sm:py-16">
+                  <Search className="mb-4 h-10 w-10 text-ink-600 sm:h-12 sm:w-12" />
+                  <p className="font-display text-base font-semibold text-ink-300 sm:text-lg">No results yet</p>
+                  <p className="mt-2 max-w-sm text-xs text-ink-500 sm:text-sm">
                     Try “jazz”, “lofi”, or an artist name — results warm up in the background as they appear.
                   </p>
                 </div>
               ) : (
-                <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
                   {searchResults.map((track) => (
                     <TrackCard
                       key={track.id}
@@ -749,7 +749,7 @@ export default function Home() {
                 </p>
               </div>
             ) : (
-              <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+              <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
                 {downloadedLibrary.map((track) => (
                   <TrackCard
                     key={track.id}
@@ -837,7 +837,7 @@ export default function Home() {
                   This playlist is empty. Add tracks from search.
                 </div>
               ) : (
-                <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
                   {playlistTracks.map((track) => (
                     <TrackCard
                       key={track.id}
@@ -891,36 +891,57 @@ export default function Home() {
                 No play history yet. Start streaming!
               </div>
             ) : (
-              <div className="surface overflow-hidden rounded-2xl">
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[540px] text-sm text-ink-300">
-                    <thead className="border-b border-white/[0.06] bg-ink-950/60 text-left text-[11px] uppercase tracking-[0.14em] text-ink-500">
-                      <tr>
-                        <th className="px-4 py-3 font-semibold">Track</th>
-                        <th className="px-4 py-3 font-semibold">Artist</th>
-                        <th className="px-4 py-3 font-semibold">Source</th>
-                        <th className="px-4 py-3 text-right font-semibold">Played</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.04]">
-                      {history.map((h) => (
-                        <tr key={h.id} className="transition hover:bg-white/[0.03]">
-                          <td className="px-4 py-3 font-semibold text-mist">{h.track_title}</td>
-                          <td className="px-4 py-3 text-ink-400">{h.track_artist}</td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-lg border border-white/10 bg-ink-900 px-2 py-0.5 text-[10px] font-bold uppercase">
-                              {h.source}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono text-xs text-ink-500">
-                            {new Date(h.played_at).toLocaleString()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <>
+                <div className="space-y-2 sm:hidden">
+                  {history.map((h) => (
+                    <div
+                      key={h.id}
+                      className="surface flex items-start justify-between gap-3 rounded-xl px-3 py-3"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-mist">{h.track_title}</p>
+                        <p className="mt-0.5 truncate text-xs text-ink-400">{h.track_artist}</p>
+                        <p className="mt-1 font-mono text-[10px] text-ink-500">
+                          {new Date(h.played_at).toLocaleString()}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-lg border border-white/10 bg-ink-900 px-2 py-0.5 text-[10px] font-bold uppercase text-ink-300">
+                        {h.source}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              </div>
+                <div className="surface hidden overflow-hidden rounded-2xl sm:block">
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[540px] text-sm text-ink-300">
+                      <thead className="border-b border-white/[0.06] bg-ink-950/60 text-left text-[11px] uppercase tracking-[0.14em] text-ink-500">
+                        <tr>
+                          <th className="px-4 py-3 font-semibold">Track</th>
+                          <th className="px-4 py-3 font-semibold">Artist</th>
+                          <th className="px-4 py-3 font-semibold">Source</th>
+                          <th className="px-4 py-3 text-right font-semibold">Played</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.04]">
+                        {history.map((h) => (
+                          <tr key={h.id} className="transition hover:bg-white/[0.03]">
+                            <td className="px-4 py-3 font-semibold text-mist">{h.track_title}</td>
+                            <td className="px-4 py-3 text-ink-400">{h.track_artist}</td>
+                            <td className="px-4 py-3">
+                              <span className="rounded-lg border border-white/10 bg-ink-900 px-2 py-0.5 text-[10px] font-bold uppercase">
+                                {h.source}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right font-mono text-xs text-ink-500">
+                              {new Date(h.played_at).toLocaleString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}

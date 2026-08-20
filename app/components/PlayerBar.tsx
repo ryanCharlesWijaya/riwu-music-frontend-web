@@ -58,8 +58,6 @@ export default function PlayerBar({
   offlineIdsRef.current = offlineTrackIds;
   isPlayingRef.current = isPlaying;
 
-  // Only reload the audio element when the track changes — not when a background
-  // download finishes and offlineTrackIds updates (that was restarting playback).
   useEffect(() => {
     if (!audioRef.current || !currentTrack) return;
     let cancelled = false;
@@ -82,7 +80,6 @@ export default function PlayerBar({
           return;
         } else {
           void prefetchTracks([trackId]);
-          // Brief wait so warm/kkdai can populate cache (~1s typical).
           await waitForStreamReady(trackId, 2000);
         }
       } else if (trackId.startsWith('yt_')) {
@@ -199,11 +196,89 @@ export default function PlayerBar({
     }
   };
 
+  const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-50 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] animate-player-in lg:left-[17.5rem] lg:px-6">
+    <div className="fixed bottom-[3.75rem] left-0 right-0 z-50 animate-player-in lg:bottom-0 lg:left-[17.5rem] lg:p-3 lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] lg:px-6">
       <audio ref={audioRef} crossOrigin="anonymous" onTimeUpdate={handleTimeUpdate} onEnded={onTrackEnded} />
 
-      <div className="mx-auto flex w-full max-w-none flex-col gap-3 rounded-2xl border border-white/[0.08] bg-ink-900/90 p-3 shadow-panel backdrop-blur-2xl sm:p-4 md:flex-row md:items-center md:justify-between md:gap-4">
+      {/* Mobile mini player */}
+      <div className="border-t border-white/[0.08] bg-ink-900/95 px-3 pb-1.5 pt-0 backdrop-blur-2xl lg:hidden">
+        <div className="relative -mx-3 mb-1.5 h-0.5 overflow-hidden bg-ink-800">
+          <div className="absolute inset-y-0 left-0 bg-signal transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          <input
+            type="range"
+            min="0"
+            max={duration || 60}
+            value={currentTime}
+            onChange={handleSeek}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            aria-label="Seek"
+          />
+        </div>
+
+        <div className="flex items-center gap-2.5">
+          <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-lg border border-white/10">
+            <img
+              src={currentTrack.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80'}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </div>
+
+          <button type="button" onClick={onOpenQueue} className="min-w-0 flex-1 text-left">
+            <h4 className="truncate font-display text-sm font-bold text-mist">{currentTrack.title}</h4>
+            <p className="truncate text-xs text-ink-400">{currentTrack.artist}</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenQueue}
+            className="relative rounded-lg p-2 text-signal"
+            title="Queue"
+          >
+            <ListMusic className="h-4 w-4" />
+            {queueCount > 0 && (
+              <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-signal px-0.5 text-[8px] font-bold text-ink-950">
+                {queueCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleSkipPrev}
+            disabled={!canSkipPrev && currentTime <= 3}
+            className="rounded-lg p-1.5 text-ink-300 disabled:opacity-30"
+          >
+            <SkipBack className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
+            onClick={onPlayPause}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-signal text-ink-950"
+          >
+            {isPlaying ? (
+              <Pause className="h-4 w-4 fill-current" />
+            ) : (
+              <Play className="ml-0.5 h-4 w-4 fill-current" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={onSkipNext}
+            disabled={!canSkipNext}
+            className="rounded-lg p-1.5 text-ink-300 disabled:opacity-30"
+          >
+            <SkipForward className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Desktop player */}
+      <div className="mx-auto hidden w-full max-w-none flex-col gap-3 rounded-2xl border border-white/[0.08] bg-ink-900/90 p-4 shadow-panel backdrop-blur-2xl md:flex-row md:items-center md:justify-between md:gap-4 lg:flex">
         <div className="flex w-full items-center gap-3 md:w-[28%]">
           <div className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-xl border border-white/10">
             <img
