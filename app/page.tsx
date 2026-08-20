@@ -18,6 +18,7 @@ import {
   Playlist,
   User,
   cacheDownloadForOffline,
+  fetchRadio,
   fetchWithAuth,
   latestDownloadByTrack,
   prefetchTracks,
@@ -59,10 +60,12 @@ export default function Home() {
   const [playlistTrack, setPlaylistTrack] = useState<MediaItem | null>(null);
   const [offlineTrackIds, setOfflineTrackIds] = useState<Set<string>>(new Set());
   const [offlineTracks, setOfflineTracks] = useState<OfflineTrackMeta[]>([]);
+  const [autoPlay, setAutoPlay] = useState(true);
   const historyQueuedRef = useRef(false);
   const playlistsQueuedRef = useRef(false);
   const cachingRef = useRef<Set<string>>(new Set());
   const lastHistoryTrackRef = useRef<string | null>(null);
+  const radioFetchRef = useRef(false);
 
   const currentTrack = queueState.tracks[queueState.index] ?? null;
   const canSkipPrev = queueState.index > 0;
@@ -123,6 +126,16 @@ export default function Home() {
     setOfflineTrackIds(new Set(ids));
     setOfflineTracks(tracks);
   }, []);
+
+  useEffect(() => {
+    const saved = localStorage.getItem('riwu_autoplay');
+    if (saved === '0') setAutoPlay(false);
+    if (saved === '1') setAutoPlay(true);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('riwu_autoplay', autoPlay ? '1' : '0');
+  }, [autoPlay]);
 
   useEffect(() => {
     void refreshOfflineIds();
@@ -476,11 +489,41 @@ export default function Home() {
     setIsPlaying(true);
   };
 
-  const handleSkipNext = () => {
-    setQueueState((prev) => {
-      if (prev.index >= prev.tracks.length - 1) return prev;
-      return { ...prev, index: prev.index + 1 };
-    });
+  const extendRadioQueue = useCallback(
+    async (seed: MediaItem, existing: MediaItem[]) => {
+      if (!seed.id.startsWith('yt_')) return [] as MediaItem[];
+      try {
+        const exclude = existing.map((t) => t.id);
+        const next = await fetchRadio(
+          { id: seed.id, artist: seed.artist, title: seed.title },
+          exclude,
+          6,
+        );
+        void prefetchTracks(next.map((t) => t.id));
+        return next;
+      } catch (err) {
+        console.error('Autoplay radio failed:', err);
+        return [] as MediaItem[];
+      }
+    },
+    [],
+  );
+
+  const handleSkipNext = async () => {
+    if (queueState.index < queueState.tracks.length - 1) {
+      setQueueState((prev) => ({ ...prev, index: prev.index + 1 }));
+      setIsPlaying(true);
+      return;
+    }
+    if (!autoPlay) return;
+    const seed = queueState.tracks[queueState.index];
+    if (!seed) return;
+    const next = await extendRadioQueue(seed, queueState.tracks);
+    if (next.length === 0) return;
+    setQueueState((prev) => ({
+      tracks: [...prev.tracks, ...next],
+      index: prev.index + 1,
+    }));
     setIsPlaying(true);
   };
 
@@ -493,16 +536,67 @@ export default function Home() {
   };
 
   const handleTrackEnded = () => {
-    let advanced = false;
-    setQueueState((prev) => {
-      if (prev.index >= prev.tracks.length - 1) {
-        return prev;
+    const prev = queueState;
+    if (prev.index < prev.tracks.length - 1) {
+      setQueueState({ ...prev, index: prev.index + 1 });
+      setIsPlaying(true);
+      return;
+    }
+
+    if (!autoPlay) {
+      setIsPlaying(false);
+      return;
+    }
+
+    const seed = prev.tracks[prev.index];
+    if (!seed) {
+      setIsPlaying(false);
+      return;
+    }
+
+    void (async () => {
+      const next = await extendRadioQueue(seed, prev.tracks);
+      if (next.length === 0) {
+        setIsPlaying(false);
+        return;
       }
-      advanced = true;
-      return { ...prev, index: prev.index + 1 };
-    });
-    setIsPlaying(advanced);
+      setQueueState({
+        tracks: [...prev.tracks, ...next],
+        index: prev.index + 1,
+      });
+      setIsPlaying(true);
+    })();
   };
+
+  // Keep a few radio tracks queued ahead while autoplay is on.
+  useEffect(() => {
+    if (!autoPlay || !isPlaying) return;
+    const remaining = queueState.tracks.length - queueState.index - 1;
+    if (remaining >= 2) return;
+    const seed = queueState.tracks[queueState.index];
+    if (!seed?.id.startsWith('yt_')) return;
+    if (radioFetchRef.current) return;
+
+    let cancelled = false;
+    radioFetchRef.current = true;
+    void (async () => {
+      try {
+        const next = await extendRadioQueue(seed, queueState.tracks);
+        if (cancelled || next.length === 0) return;
+        setQueueState((prev) => {
+          const known = new Set(prev.tracks.map((t) => t.id));
+          const fresh = next.filter((t) => !known.has(t.id));
+          if (fresh.length === 0) return prev;
+          return { ...prev, tracks: [...prev.tracks, ...fresh] };
+        });
+      } finally {
+        radioFetchRef.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [autoPlay, isPlaying, queueState.index, queueState.tracks.length, extendRadioQueue]);
 
   const playAtQueueIndex = (index: number) => {
     setQueueState((prev) => {
@@ -955,7 +1049,9 @@ export default function Home() {
         isPlaying={isPlaying}
         queueCount={queueState.tracks.length}
         canSkipPrev={canSkipPrev}
-        canSkipNext={canSkipNext}
+        canSkipNext={canSkipNext || autoPlay}
+        autoPlay={autoPlay}
+        onAutoPlayChange={setAutoPlay}
         onPlayPause={() => setIsPlaying(!isPlaying)}
         onSkipPrev={handleSkipPrev}
         onSkipNext={handleSkipNext}

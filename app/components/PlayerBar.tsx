@@ -13,6 +13,7 @@ import {
   Layers,
   Video,
   ListMusic,
+  Repeat,
 } from 'lucide-react';
 import { MediaItem, API_BASE, prefetchTracks, waitForStreamReady } from '../lib/api';
 import { getOfflineObjectUrl } from '../lib/offlineStore';
@@ -23,6 +24,8 @@ interface PlayerBarProps {
   queueCount: number;
   canSkipPrev: boolean;
   canSkipNext: boolean;
+  autoPlay: boolean;
+  onAutoPlayChange: (enabled: boolean) => void;
   onPlayPause: () => void;
   onSkipPrev: () => void;
   onSkipNext: () => void;
@@ -38,6 +41,8 @@ export default function PlayerBar({
   queueCount,
   canSkipPrev,
   canSkipNext,
+  autoPlay,
+  onAutoPlayChange,
   onPlayPause,
   onSkipPrev,
   onSkipNext,
@@ -247,6 +252,15 @@ export default function PlayerBar({
 
           <button
             type="button"
+            onClick={() => onAutoPlayChange(!autoPlay)}
+            className={`rounded-lg p-2 ${autoPlay ? 'text-signal' : 'text-ink-500'}`}
+            title={autoPlay ? 'Autoplay on' : 'Autoplay off'}
+          >
+            <Repeat className="h-4 w-4" />
+          </button>
+
+          <button
+            type="button"
             onClick={handleSkipPrev}
             disabled={!canSkipPrev && currentTime <= 3}
             className="rounded-lg p-1.5 text-ink-300 disabled:opacity-30"
@@ -336,6 +350,19 @@ export default function PlayerBar({
               title="Next"
             >
               <SkipForward className="h-5 w-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onAutoPlayChange(!autoPlay)}
+              className={`rounded-xl border p-2 transition ${
+                autoPlay
+                  ? 'border-signal/40 bg-signal/10 text-signal'
+                  : 'border-white/10 bg-white/[0.04] text-ink-400 hover:text-mist'
+              }`}
+              title={autoPlay ? 'Autoplay on — YouTube Mix continues when the queue ends' : 'Autoplay off'}
+            >
+              <Repeat className="h-4 w-4" />
             </button>
 
             <button

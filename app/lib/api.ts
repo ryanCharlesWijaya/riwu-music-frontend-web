@@ -106,6 +106,27 @@ export async function prefetchTracks(ids: string[]) {
   }
 }
 
+export async function fetchRadio(
+  seed: { id: string; artist?: string; title?: string },
+  excludeIds: string[] = [],
+  limit = 8,
+): Promise<MediaItem[]> {
+  const params = new URLSearchParams({
+    id: seed.id,
+    limit: String(limit),
+  });
+  if (seed.artist) params.set('artist', seed.artist);
+  if (seed.title) params.set('title', seed.title);
+  if (excludeIds.length > 0) params.set('exclude', excludeIds.join(','));
+
+  const res = await fetch(`${API_BASE}/media/radio?${params}`);
+  if (!res.ok) {
+    throw new Error(await res.text() || 'Radio failed');
+  }
+  const data = await res.json();
+  return Array.isArray(data.results) ? data.results : [];
+}
+
 export async function waitForStreamReady(trackId: string, timeoutMs = 6000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
