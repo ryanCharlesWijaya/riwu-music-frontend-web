@@ -14,6 +14,7 @@ import {
   Video,
   ListMusic,
   Repeat,
+  Loader2,
 } from 'lucide-react';
 import { MediaItem, API_BASE, prefetchTracks, waitForStreamReady } from '../lib/api';
 import { getOfflineObjectUrl } from '../lib/offlineStore';
@@ -61,6 +62,7 @@ export default function PlayerBar({
   const [duration, setDuration] = useState(60);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
 
   offlineIdsRef.current = offlineTrackIds;
   isPlayingRef.current = isPlaying;
@@ -69,8 +71,23 @@ export default function PlayerBar({
     if (!audioRef.current || !currentTrack) return;
     let cancelled = false;
     const trackId = currentTrack.id;
+    const audio = audioRef.current;
+
+    const markReady = () => {
+      if (!cancelled) setIsBuffering(false);
+    };
+    const markWaiting = () => {
+      if (!cancelled) setIsBuffering(true);
+    };
+
+    audio.addEventListener('waiting', markWaiting);
+    audio.addEventListener('stalled', markWaiting);
+    audio.addEventListener('loadstart', markWaiting);
+    audio.addEventListener('canplay', markReady);
+    audio.addEventListener('playing', markReady);
 
     const load = async () => {
+      setIsBuffering(true);
       if (objectUrlRef.current) {
         URL.revokeObjectURL(objectUrlRef.current);
         objectUrlRef.current = null;
@@ -84,6 +101,7 @@ export default function PlayerBar({
           objectUrlRef.current = offlineUrl;
           src = offlineUrl;
         } else if (!navigator.onLine) {
+          if (!cancelled) setIsBuffering(false);
           return;
         } else {
           void prefetchTracks([trackId], { priority: true });
@@ -105,6 +123,11 @@ export default function PlayerBar({
     load();
     return () => {
       cancelled = true;
+      audio.removeEventListener('waiting', markWaiting);
+      audio.removeEventListener('stalled', markWaiting);
+      audio.removeEventListener('loadstart', markWaiting);
+      audio.removeEventListener('canplay', markReady);
+      audio.removeEventListener('playing', markReady);
     };
   }, [currentTrack?.id]);
 
@@ -229,7 +252,11 @@ export default function PlayerBar({
       {/* Mobile mini player */}
       <div className="border-t border-white/[0.08] bg-ink-900/95 px-3 pb-1.5 pt-0 backdrop-blur-2xl lg:hidden">
         <div className="relative -mx-3 mb-1.5 h-0.5 overflow-hidden bg-ink-800">
-          <div className="absolute inset-y-0 left-0 bg-signal transition-[width] duration-150" style={{ width: `${progress}%` }} />
+          <div
+            className={`absolute inset-y-0 left-0 bg-signal transition-[width] duration-150 ${isBuffering ? 'opacity-60' : ''}`}
+            style={{ width: `${progress}%` }}
+          />
+          {isBuffering && <div className="absolute inset-0 skeleton opacity-40" />}
           <input
             type="range"
             min="0"
@@ -246,13 +273,20 @@ export default function PlayerBar({
             <img
               src={currentTrack.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80'}
               alt=""
-              className="h-full w-full object-cover"
+              className={`h-full w-full object-cover ${isBuffering ? 'opacity-50' : ''}`}
             />
+            {isBuffering && (
+              <div className="absolute inset-0 flex items-center justify-center bg-ink-950/45">
+                <Loader2 className="h-4 w-4 animate-spin-slow text-signal" />
+              </div>
+            )}
           </div>
 
           <button type="button" onClick={onOpenQueue} className="min-w-0 flex-1 text-left">
             <h4 className="truncate font-display text-sm font-bold text-mist">{currentTrack.title}</h4>
-            <p className="truncate text-xs text-ink-400">{currentTrack.artist}</p>
+            <p className="truncate text-xs text-ink-400">
+              {isBuffering ? 'Buffering…' : currentTrack.artist}
+            </p>
           </button>
 
           <button
@@ -291,8 +325,11 @@ export default function PlayerBar({
             type="button"
             onClick={onPlayPause}
             className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-signal text-ink-950"
+            aria-label={isBuffering ? 'Buffering' : isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? (
+            {isBuffering ? (
+              <Loader2 className="h-4 w-4 animate-spin-slow" />
+            ) : isPlaying ? (
               <Pause className="h-4 w-4 fill-current" />
             ) : (
               <Play className="ml-0.5 h-4 w-4 fill-current" />
@@ -317,9 +354,13 @@ export default function PlayerBar({
             <img
               src={currentTrack.thumbnail_url || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&q=80'}
               alt=""
-              className="h-full w-full object-cover"
+              className={`h-full w-full object-cover ${isBuffering ? 'opacity-50' : ''}`}
             />
-            {isPlaying && (
+            {isBuffering ? (
+              <div className="absolute inset-0 flex items-center justify-center bg-ink-950/55">
+                <Loader2 className="h-5 w-5 animate-spin-slow text-signal" />
+              </div>
+            ) : isPlaying ? (
               <div className="absolute inset-0 flex items-center justify-center bg-ink-950/55">
                 <div className="flex h-5 items-end px-1">
                   <span className="wave-bar" />
@@ -328,11 +369,13 @@ export default function PlayerBar({
                   <span className="wave-bar" />
                 </div>
               </div>
-            )}
+            ) : null}
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="truncate font-display text-sm font-bold text-mist">{currentTrack.title}</h4>
-            <p className="truncate text-xs text-ink-400">{currentTrack.artist}</p>
+            <p className="truncate text-xs text-ink-400">
+              {isBuffering ? 'Buffering…' : currentTrack.artist}
+            </p>
             <div className="mt-1">{sourceBadge(currentTrack.source)}</div>
           </div>
         </div>
@@ -353,8 +396,11 @@ export default function PlayerBar({
               type="button"
               onClick={onPlayPause}
               className="flex h-12 w-12 items-center justify-center rounded-full bg-signal text-ink-950 shadow-lift transition hover:scale-105"
+              aria-label={isBuffering ? 'Buffering' : isPlaying ? 'Pause' : 'Play'}
             >
-              {isPlaying ? (
+              {isBuffering ? (
+                <Loader2 className="h-5 w-5 animate-spin-slow" />
+              ) : isPlaying ? (
                 <Pause className="h-5 w-5 fill-current" />
               ) : (
                 <Play className="ml-0.5 h-5 w-5 fill-current" />

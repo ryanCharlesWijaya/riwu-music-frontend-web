@@ -12,6 +12,13 @@ import PlaylistDetail, { PlaylistRow } from './components/PlaylistDetail';
 import SearchResults from './components/SearchResults';
 import DownloadsLibrary from './components/DownloadsLibrary';
 import QueueDrawer from './components/QueueDrawer';
+import Settings, { ThemeMode } from './components/Settings';
+import PasswordModal from './components/PasswordModal';
+import {
+  HistorySkeleton,
+  LibraryPageSkeleton,
+  PlaylistGridSkeleton,
+} from './components/Skeleton';
 import {
   API_BASE,
   DownloadTask,
@@ -34,17 +41,44 @@ import {
   readCachedDownloads,
   readCachedPlaylistTracks,
   readCachedPlaylists,
+  listAllCachedPlaylistTrackIds,
 } from './lib/localCache';
+
+type AppTab = 'player' | 'admin' | 'playlists' | 'history' | 'downloads' | 'settings';
 
 type QueueState = {
   tracks: MediaItem[];
   index: number;
 };
 
+const PLAYLIST_DL_IDS_KEY = 'riwu_playlist_dl_ids';
+const THEME_KEY = 'riwu_theme';
+const AUTO_LOCAL_PLAYLIST_KEY = 'riwu_auto_local_playlist';
+
+function readPlaylistDownloadIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set();
+  try {
+    const raw = localStorage.getItem(PLAYLIST_DL_IDS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writePlaylistDownloadIds(ids: Set<string>) {
+  localStorage.setItem(PLAYLIST_DL_IDS_KEY, JSON.stringify(Array.from(ids)));
+}
+
 export default function Home() {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'player' | 'admin' | 'playlists' | 'history' | 'downloads'>('player');
+  const [activeTab, setActiveTab] = useState<AppTab>('player');
+  const [theme, setTheme] = useState<ThemeMode>('dark');
+  const [autoLocalPlaylist, setAutoLocalPlaylist] = useState(true);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [playlistDownloadIds, setPlaylistDownloadIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<MediaItem[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -55,6 +89,9 @@ export default function Home() {
   const [selectedPlaylistId, setSelectedPlaylistId] = useState<string | null>(null);
   const [playlistRows, setPlaylistRows] = useState<PlaylistRow[]>([]);
   const [loadingPlaylistTracks, setLoadingPlaylistTracks] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadingPlaylists, setLoadingPlaylists] = useState(false);
+  const [tabReady, setTabReady] = useState(true);
   const [history, setHistory] = useState<PlayHistory[]>([]);
   const [downloads, setDownloads] = useState<DownloadTask[]>([]);
   const [showAuth, setShowAuth] = useState(false);
@@ -68,6 +105,7 @@ export default function Home() {
   const cachingRef = useRef<Set<string>>(new Set());
   const lastHistoryTrackRef = useRef<string | null>(null);
   const radioFetchRef = useRef(false);
+  const tabTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentTrack = queueState.tracks[queueState.index] ?? null;
   const canSkipPrev = queueState.index > 0;
@@ -131,6 +169,36 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      if (tabTimerRef.current) clearTimeout(tabTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_KEY);
+    const nextTheme: ThemeMode = savedTheme === 'light' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+
+    const savedAuto = localStorage.getItem(AUTO_LOCAL_PLAYLIST_KEY);
+    if (savedAuto === '0') setAutoLocalPlaylist(false);
+    if (savedAuto === '1') setAutoLocalPlaylist(true);
+
+    setPlaylistDownloadIds(readPlaylistDownloadIds());
+  }, []);
+
+  const applyTheme = useCallback((next: ThemeMode) => {
+    setTheme(next);
+    localStorage.setItem(THEME_KEY, next);
+    document.documentElement.setAttribute('data-theme', next);
+  }, []);
+
+  const applyAutoLocalPlaylist = useCallback((enabled: boolean) => {
+    setAutoLocalPlaylist(enabled);
+    localStorage.setItem(AUTO_LOCAL_PLAYLIST_KEY, enabled ? '1' : '0');
+  }, []);
+
+  useEffect(() => {
     const saved = localStorage.getItem('riwu_autoplay');
     if (saved === '0') setAutoPlay(false);
     if (saved === '1') setAutoPlay(true);
@@ -175,7 +243,8 @@ export default function Home() {
     setDownloads([]);
   };
 
-  const changeTab = (tab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads') => {
+  const changeTab = (tab: AppTab) => {
+    setTabReady(false);
     setActiveTab(tab);
     if (tab !== 'playlists') {
       setSelectedPlaylistId(null);
@@ -184,6 +253,8 @@ export default function Home() {
       setSelectedPlaylistId(null);
       setPlaylistRows([]);
     }
+    if (tabTimerRef.current) clearTimeout(tabTimerRef.current);
+    tabTimerRef.current = setTimeout(() => setTabReady(true), 200);
   };
 
   const loadPlaylistTracks = useCallback(
@@ -229,9 +300,12 @@ export default function Home() {
 
   const openPlaylist = useCallback(
     (playlistId: string) => {
+      setTabReady(false);
       setActiveTab('playlists');
       setSelectedPlaylistId(playlistId);
       void loadPlaylistTracks(playlistId);
+      if (tabTimerRef.current) clearTimeout(tabTimerRef.current);
+      tabTimerRef.current = setTimeout(() => setTabReady(true), 160);
     },
     [loadPlaylistTracks]
   );
@@ -267,6 +341,7 @@ export default function Home() {
       setPlaylists(readCachedPlaylists());
       return;
     }
+    setLoadingPlaylists(true);
     try {
       const data = await fetchWithAuth('/playlists', token);
       const list = Array.isArray(data) ? data : [];
@@ -293,11 +368,14 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to load playlists:', err);
       setPlaylists(readCachedPlaylists());
+    } finally {
+      setLoadingPlaylists(false);
     }
   }, [token]);
 
   const loadHistory = useCallback(async (): Promise<PlayHistory[]> => {
     if (!token) return [];
+    setLoadingHistory(true);
     try {
       const data = await fetchWithAuth('/history', token);
       const items = Array.isArray(data) ? (data as PlayHistory[]) : [];
@@ -311,6 +389,8 @@ export default function Home() {
     } catch (err) {
       console.error('Failed to load history:', err);
       return [];
+    } finally {
+      setLoadingHistory(false);
     }
   }, [token]);
 
@@ -383,12 +463,30 @@ export default function Home() {
           method: 'POST',
           body: JSON.stringify({ playlist_id: playlistId || '' }),
         });
+
+        setPlaylistDownloadIds((prev) => {
+          const next = new Set(prev);
+          if (playlistId) {
+            for (const track of readCachedPlaylistTracks(playlistId)) next.add(track.id);
+            if (selectedPlaylistId === playlistId) {
+              for (const track of playlistTracks) next.add(track.id);
+            }
+          } else {
+            for (const id of listAllCachedPlaylistTrackIds()) next.add(id);
+            for (const pl of playlists) {
+              for (const track of readCachedPlaylistTracks(pl.id)) next.add(track.id);
+            }
+          }
+          writePlaylistDownloadIds(next);
+          return next;
+        });
+
         await loadDownloads();
       } catch (err) {
         console.error('Failed to queue playlist downloads:', err);
       }
     },
-    [token, loadDownloads]
+    [token, loadDownloads, playlists, selectedPlaylistId, playlistTracks]
   );
 
   useEffect(() => {
@@ -412,19 +510,24 @@ export default function Home() {
   }, [token, loadPlaylists, loadHistory, loadDownloads, queueHistoryDownloads, queuePlaylistDownloads]);
 
   // When VPS downloads complete, quietly cache them in IndexedDB for offline play.
+  // Playlist tracks only auto-cache locally when the settings toggle is on.
   useEffect(() => {
     if (!token) return;
     for (const task of downloads) {
       if (task.status !== 'completed') continue;
       if (offlineTrackIds.has(task.track_id)) continue;
       if (cachingRef.current.has(task.track_id)) continue;
+      const fromPlaylist =
+        playlistDownloadIds.has(task.track_id) ||
+        listAllCachedPlaylistTrackIds().includes(task.track_id);
+      if (fromPlaylist && !autoLocalPlaylist) continue;
       cachingRef.current.add(task.track_id);
       void cacheDownloadForOffline(task, token)
         .then(() => refreshOfflineIds())
         .catch(console.error)
         .finally(() => cachingRef.current.delete(task.track_id));
     }
-  }, [downloads, token, offlineTrackIds, refreshOfflineIds]);
+  }, [downloads, token, offlineTrackIds, refreshOfflineIds, playlistDownloadIds, autoLocalPlaylist]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -662,6 +765,35 @@ export default function Home() {
     });
   };
 
+  const reorderQueue = (fromIndex: number, toIndex: number) => {
+    setQueueState((prev) => {
+      if (
+        fromIndex === toIndex ||
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= prev.tracks.length ||
+        toIndex >= prev.tracks.length
+      ) {
+        return prev;
+      }
+
+      const tracks = [...prev.tracks];
+      const [moved] = tracks.splice(fromIndex, 1);
+      tracks.splice(toIndex, 0, moved);
+
+      let nextIndex = prev.index;
+      if (fromIndex === prev.index) {
+        nextIndex = toIndex;
+      } else if (fromIndex < prev.index && toIndex >= prev.index) {
+        nextIndex = prev.index - 1;
+      } else if (fromIndex > prev.index && toIndex <= prev.index) {
+        nextIndex = prev.index + 1;
+      }
+
+      return { tracks, index: nextIndex };
+    });
+  };
+
   const clearQueue = () => {
     setQueueState({ tracks: [], index: 0 });
     setIsPlaying(false);
@@ -791,6 +923,28 @@ export default function Home() {
         </div>
 
         <main className="w-full px-3 pb-player pt-[7.25rem] sm:px-7 lg:px-8 lg:pt-[7.5rem]">
+        {!tabReady ? (
+          activeTab === 'history' ? (
+            <div className="animate-rise-in space-y-6">
+              <div className="flex items-center gap-3">
+                <History className="h-7 w-7 text-ember" />
+                <h1 className="font-display text-2xl font-bold text-mist sm:text-3xl">Play History</h1>
+              </div>
+              <HistorySkeleton />
+            </div>
+          ) : activeTab === 'playlists' && !selectedPlaylistId ? (
+            <div className="animate-rise-in space-y-6">
+              <div className="flex items-center gap-3">
+                <ListMusic className="h-7 w-7 shrink-0 text-signal" />
+                <h1 className="font-display text-2xl font-bold text-mist sm:text-3xl">Your Playlists</h1>
+              </div>
+              <PlaylistGridSkeleton />
+            </div>
+          ) : (
+            <LibraryPageSkeleton withBack={activeTab === 'playlists'} />
+          )
+        ) : (
+          <>
         {activeTab === 'player' && (
           <SearchResults
             query={searchQuery}
@@ -881,7 +1035,9 @@ export default function Home() {
                     </button>
                   )}
                 </div>
-                {playlists.length === 0 ? (
+                {loadingPlaylists && playlists.length === 0 ? (
+                  <PlaylistGridSkeleton />
+                ) : playlists.length === 0 ? (
                   <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
                     No playlists yet. Add tracks from search results.
                   </div>
@@ -923,6 +1079,8 @@ export default function Home() {
               <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
                 Sign in to view your listening history
               </div>
+            ) : loadingHistory && history.length === 0 ? (
+              <HistorySkeleton rows={8} />
             ) : history.length === 0 ? (
               <div className="surface rounded-[1.5rem] px-6 py-14 text-center text-ink-400">
                 No play history yet. Start streaming!
@@ -984,6 +1142,26 @@ export default function Home() {
         )}
 
         {activeTab === 'admin' && user?.role === 'admin' && <AdminPanel token={token} />}
+
+        {activeTab === 'settings' && (
+          <Settings
+            user={user}
+            token={token}
+            theme={theme}
+            autoLocalPlaylist={autoLocalPlaylist}
+            onThemeChange={applyTheme}
+            onAutoLocalPlaylistChange={applyAutoLocalPlaylist}
+            onUserUpdated={(nextUser) => {
+              setUser(nextUser);
+              localStorage.setItem('riwu_user', JSON.stringify(nextUser));
+            }}
+            onOpenPasswordModal={() => setShowPasswordModal(true)}
+            onOpenAuth={() => setShowAuth(true)}
+            onLogout={handleLogout}
+          />
+        )}
+          </>
+        )}
       </main>
       </div>
 
@@ -1011,6 +1189,12 @@ export default function Home() {
         onAuthSuccess={handleAuthSuccess}
       />
 
+      <PasswordModal
+        isOpen={showPasswordModal}
+        token={token || ''}
+        onClose={() => setShowPasswordModal(false)}
+      />
+
       <DownloadDrawer
         isOpen={showDownloads}
         onClose={() => setShowDownloads(false)}
@@ -1026,6 +1210,7 @@ export default function Home() {
         currentIndex={queueState.index}
         onPlayAt={playAtQueueIndex}
         onRemoveAt={removeFromQueue}
+        onReorder={reorderQueue}
         onClear={clearQueue}
       />
 

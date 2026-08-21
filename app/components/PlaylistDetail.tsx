@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { DownloadTask, MediaItem, Playlist, User } from '../lib/api';
 import TrackTable, { TrackTableRow } from './TrackTable';
+import { LibraryPageSkeleton, TrackTableSkeleton } from './Skeleton';
 
 export type PlaylistRow = TrackTableRow;
 
@@ -88,6 +89,10 @@ export default function PlaylistDetail({
     const shuffled = [...rows.map((r) => r.track)].sort(() => Math.random() - 0.5);
     onPlayAll(shuffled, 0);
   };
+
+  if (loading && rows.length === 0) {
+    return <LibraryPageSkeleton withBack rows={8} />;
+  }
 
   return (
     <div className="animate-rise-in">
@@ -207,7 +212,7 @@ export default function PlaylistDetail({
 
       <div className="mt-2">
         {loading ? (
-          <div className="px-2 py-16 text-center text-ink-400">Loading tracks...</div>
+          <TrackTableSkeleton rows={8} />
         ) : (
           <TrackTable
             rows={filtered}

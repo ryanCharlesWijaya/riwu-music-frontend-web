@@ -2,7 +2,8 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+:root,
+html[data-theme='dark'] {
   --bg: #0b0d10;
   --bg-elevated: #12171d;
   --fg: #e8eef2;
@@ -11,6 +12,60 @@
   --signal: #38bdf8;
   --ember: #ff5c3a;
   --teal-glow: rgba(56, 189, 248, 0.18);
+  --mist: #e8eef2;
+  --ink-50: #f4f6f8;
+  --ink-100: #e2e7ec;
+  --ink-200: #c5ced8;
+  --ink-300: #9aa8b6;
+  --ink-400: #6b7c8c;
+  --ink-500: #4a5b6a;
+  --ink-600: #334250;
+  --ink-700: #232e39;
+  --ink-800: #161d24;
+  --ink-900: #0f1419;
+  --ink-950: #0b0d10;
+  --shell-a: rgba(56, 189, 248, 0.14);
+  --shell-b: rgba(255, 92, 58, 0.08);
+  --shell-c: rgba(14, 165, 233, 0.12);
+  --shell-base-0: #0b0d10;
+  --shell-base-1: #0e1217;
+  --panel-bg: rgba(18, 23, 29, 0.72);
+  --surface-bg: rgba(15, 20, 26, 0.85);
+  --field-bg: rgba(8, 10, 12, 0.65);
+  --white-soft: rgba(255, 255, 255, 0.04);
+}
+
+html[data-theme='light'] {
+  --bg: #eef2f6;
+  --bg-elevated: #ffffff;
+  --fg: #12171d;
+  --muted: #5b6b7c;
+  --line: rgba(15, 20, 26, 0.1);
+  --signal: #0284c7;
+  --ember: #e11d48;
+  --teal-glow: rgba(2, 132, 199, 0.12);
+  --mist: #12171d;
+  --ink-50: #12171d;
+  --ink-100: #1e2936;
+  --ink-200: #334250;
+  --ink-300: #4a5b6a;
+  --ink-400: #5b6b7c;
+  --ink-500: #6b7c8c;
+  --ink-600: #9aa8b6;
+  --ink-700: #c5ced8;
+  --ink-800: #e2e7ec;
+  --ink-900: #f4f6f8;
+  --ink-950: #ffffff;
+  --shell-a: rgba(2, 132, 199, 0.1);
+  --shell-b: rgba(225, 29, 72, 0.06);
+  --shell-c: rgba(14, 165, 233, 0.08);
+  --shell-base-0: #eef2f6;
+  --shell-base-1: #f7f9fb;
+  --panel-bg: rgba(255, 255, 255, 0.88);
+  --surface-bg: rgba(255, 255, 255, 0.92);
+  --field-bg: rgba(255, 255, 255, 0.95);
+  --white-soft: rgba(15, 20, 26, 0.04);
+  color-scheme: light;
 }
 
 * {
@@ -34,10 +89,10 @@ body {
   position: relative;
   min-height: 100vh;
   background:
-    radial-gradient(ellipse 90% 55% at 8% -10%, rgba(56, 189, 248, 0.14), transparent 50%),
-    radial-gradient(ellipse 70% 45% at 100% 5%, rgba(255, 92, 58, 0.08), transparent 48%),
-    radial-gradient(ellipse 55% 40% at 55% 110%, rgba(14, 165, 233, 0.12), transparent 55%),
-    linear-gradient(180deg, #0b0d10 0%, #0e1217 45%, #0b0d10 100%);
+    radial-gradient(ellipse 90% 55% at 8% -10%, var(--shell-a), transparent 50%),
+    radial-gradient(ellipse 70% 45% at 100% 5%, var(--shell-b), transparent 48%),
+    radial-gradient(ellipse 55% 40% at 55% 110%, var(--shell-c), transparent 55%),
+    linear-gradient(180deg, var(--shell-base-0) 0%, var(--shell-base-1) 45%, var(--shell-base-0) 100%);
 }
 
 .app-shell::before {
@@ -61,7 +116,7 @@ body {
 }
 
 .glass-panel {
-  background: rgba(18, 23, 29, 0.72);
+  background: var(--panel-bg);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--line);
@@ -69,7 +124,7 @@ body {
 }
 
 .surface {
-  background: rgba(15, 20, 26, 0.85);
+  background: var(--surface-bg);
   border: 1px solid var(--line);
 }
 
@@ -104,7 +159,7 @@ body {
 }
 
 .field {
-  background: rgba(8, 10, 12, 0.65);
+  background: var(--field-bg);
   border: 1px solid var(--line);
   color: var(--fg);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -263,6 +318,37 @@ input[type='range'] {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(232, 238, 242, 0.05) 0%,
+    rgba(232, 238, 242, 0.12) 45%,
+    rgba(56, 189, 248, 0.1) 55%,
+    rgba(232, 238, 242, 0.05) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin-slow {
+  animation: spin-slow 0.85s linear infinite;
 }
 
 /* Safe area for mobile: bottom tabs (~3.75rem) + mini player (~4rem) */

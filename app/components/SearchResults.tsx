@@ -4,6 +4,7 @@ import React from 'react';
 import { Pause, Play, Search, Shuffle } from 'lucide-react';
 import { DownloadTask, MediaItem } from '../lib/api';
 import TrackTable from './TrackTable';
+import { LibraryPageSkeleton, TrackTableSkeleton } from './Skeleton';
 
 interface SearchResultsProps {
   query: string;
@@ -39,6 +40,10 @@ export default function SearchResults({
   const cover = results.find((t) => t.thumbnail_url)?.thumbnail_url || '';
   const playingInResults = results.some((t) => t.id === currentTrackId) && isPlaying;
   const title = query.trim() || 'Search results';
+
+  if (isSearching && results.length === 0) {
+    return <LibraryPageSkeleton rows={9} />;
+  }
 
   if (!isSearching && results.length === 0) {
     return (
@@ -123,8 +128,8 @@ export default function SearchResults({
       </div>
 
       <div className="mt-2">
-        {isSearching && results.length === 0 ? (
-          <div className="px-2 py-16 text-center text-ink-400">Searching…</div>
+        {isSearching ? (
+          <TrackTableSkeleton rows={Math.max(results.length, 6)} />
         ) : (
           <TrackTable
             rows={results.map((track) => ({ track }))}

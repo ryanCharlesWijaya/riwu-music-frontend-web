@@ -45,6 +45,18 @@ export function readCachedPlaylistTracks(playlistId: string): MediaItem[] {
   return Array.isArray(tracks) ? tracks : [];
 }
 
+export function listAllCachedPlaylistTrackIds(): string[] {
+  const all = readJson<Record<string, MediaItem[]>>(PLAYLIST_TRACKS_KEY, {});
+  const ids = new Set<string>();
+  for (const tracks of Object.values(all)) {
+    if (!Array.isArray(tracks)) continue;
+    for (const track of tracks) {
+      if (track?.id) ids.add(track.id);
+    }
+  }
+  return Array.from(ids);
+}
+
 export function cacheDownloads(downloads: DownloadTask[]) {
   writeJson(DOWNLOADS_KEY, downloads);
 }

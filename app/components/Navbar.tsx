@@ -14,10 +14,12 @@ import {
 } from 'lucide-react';
 import { Playlist, User as UserType } from '../lib/api';
 
+type AppTab = 'player' | 'admin' | 'playlists' | 'history' | 'downloads' | 'settings';
+
 interface NavbarProps {
   user: UserType | null;
-  activeTab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads';
-  setActiveTab: (tab: 'player' | 'admin' | 'playlists' | 'history' | 'downloads') => void;
+  activeTab: AppTab;
+  setActiveTab: (tab: AppTab) => void;
   playlists: Playlist[];
   selectedPlaylistId: string | null;
   onSelectPlaylist: (playlistId: string) => void;
@@ -91,9 +93,9 @@ export default function Navbar({
             {user ? (
               <button
                 type="button"
-                onClick={onLogout}
+                onClick={() => setActiveTab('settings')}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-signal to-ember font-display text-xs font-bold text-ink-950"
-                title={`Sign out (${user.name})`}
+                title={`Settings (${user.name})`}
               >
                 {user.name.charAt(0).toUpperCase()}
               </button>
@@ -247,12 +249,7 @@ export default function Navbar({
                 <span>Admin</span>
               </button>
             )}
-            <button
-              type="button"
-              disabled
-              title="Settings coming soon"
-              className="flex cursor-not-allowed items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-600"
-            >
+            <button type="button" onClick={() => setActiveTab('settings')} className={navBtn(activeTab === 'settings')}>
               <Settings className="h-4 w-4" />
               <span>Settings</span>
             </button>
