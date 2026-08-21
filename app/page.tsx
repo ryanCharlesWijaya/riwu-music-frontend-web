@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, History, ListMusic, Download } from 'lucide-react';
 import Navbar from './components/Navbar';
-import TrackCard from './components/TrackCard';
 import PlayerBar from './components/PlayerBar';
 import AdminPanel from './components/AdminPanel';
 import AuthModal from './components/AuthModal';
@@ -11,6 +10,7 @@ import DownloadDrawer from './components/DownloadDrawer';
 import PlaylistPicker from './components/PlaylistPicker';
 import PlaylistDetail, { PlaylistRow } from './components/PlaylistDetail';
 import SearchResults from './components/SearchResults';
+import DownloadsLibrary from './components/DownloadsLibrary';
 import QueueDrawer from './components/QueueDrawer';
 import {
   API_BASE,
@@ -810,70 +810,21 @@ export default function Home() {
         )}
 
         {activeTab === 'downloads' && (
-          <div className="space-y-6 animate-rise-in">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex min-w-0 items-center gap-3">
-                <Download className="h-7 w-7 shrink-0 text-signal" />
-                <div>
-                  <h1 className="font-display text-2xl font-bold text-mist sm:text-3xl">Downloads</h1>
-                  <p className="mt-1 text-sm text-ink-400">
-                    {downloadedLibrary.length > 0
-                      ? `${downloadedLibrary.length} songs ready offline`
-                      : 'Completed downloads show up here'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                {downloadedLibrary.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => playQueue(downloadedLibrary)}
-                    className="btn-signal rounded-xl px-4 py-2 text-sm"
-                  >
-                    Play all
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setShowDownloads(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-ink-300 transition hover:border-signal/35 hover:text-signal"
-                >
-                  Download queue
-                  {pendingCount > 0 && (
-                    <span className="rounded-full bg-ember px-1.5 py-0.5 font-mono text-[10px] font-bold text-white">
-                      {pendingCount}
-                    </span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {downloadedLibrary.length === 0 ? (
-              <div className="surface flex flex-col items-center justify-center rounded-[1.5rem] px-6 py-16 text-center">
-                <Download className="mb-4 h-12 w-12 text-ink-600" />
-                <p className="font-display text-lg font-semibold text-ink-300">No downloads yet</p>
-                <p className="mt-2 max-w-sm text-sm text-ink-500">
-                  Download tracks from search or playlists — they will appear in this library.
-                </p>
-              </div>
-            ) : (
-              <div className="stagger grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3 2xl:grid-cols-4">
-                {downloadedLibrary.map((track) => (
-                  <TrackCard
-                    key={track.id}
-                    track={track}
-                    isPlaying={currentTrack?.id === track.id && isPlaying}
-                    downloadTask={downloadsByTrack[track.id]}
-                    isOfflineReady={offlineTrackIds.has(track.id) || downloadsByTrack[track.id]?.status === 'completed'}
-                    onPlay={handlePlay}
-                    onDownload={handleDownload}
-                    onAddToPlaylist={handleAddToPlaylist}
-                    onAddToQueue={handleAddToQueue}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+          <DownloadsLibrary
+            tracks={downloadedLibrary}
+            pendingCount={pendingCount}
+            currentTrackId={currentTrack?.id}
+            isPlaying={isPlaying}
+            downloadsByTrack={downloadsByTrack}
+            offlineTrackIds={offlineTrackIds}
+            onPlayAll={playQueue}
+            onTogglePlay={() => setIsPlaying((v) => !v)}
+            onPlayTrack={handlePlay}
+            onDownloadTrack={handleDownload}
+            onAddToQueue={handleAddToQueue}
+            onAddToPlaylist={handleAddToPlaylist}
+            onOpenQueue={() => setShowDownloads(true)}
+          />
         )}
 
         {activeTab === 'playlists' && (

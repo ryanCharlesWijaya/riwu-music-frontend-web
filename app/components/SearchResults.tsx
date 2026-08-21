@@ -54,7 +54,7 @@ export default function SearchResults({
 
   return (
     <div className="animate-rise-in">
-      <section className="relative overflow-hidden px-1 pb-6 pt-2 sm:px-0 sm:pb-8 sm:pt-4">
+      <section className="relative overflow-hidden px-4 pb-6 pt-2 sm:px-5 sm:pb-8 sm:pt-4 lg:px-6">
         <div
           className="pointer-events-none absolute inset-0 -mx-3 sm:-mx-6 lg:-mx-8"
           style={{
@@ -75,11 +75,11 @@ export default function SearchResults({
           </div>
 
           <div className="min-w-0 flex-1 pb-1 text-center sm:text-left">
-            <p className="text-xs font-semibold uppercase tracking-wide text-mist">Search</p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold leading-none tracking-tight text-mist sm:text-5xl lg:text-6xl">
+            <p className="font-sans text-xs font-semibold uppercase tracking-wide text-mist">Search</p>
+            <h1 className="mt-1 font-sans text-3xl font-extrabold leading-none tracking-tight text-mist sm:text-5xl lg:text-6xl">
               {isSearching ? 'Searching…' : title}
             </h1>
-            <p className="mt-3 text-sm text-ink-300">
+            <p className="mt-3 font-sans text-sm text-ink-300">
               {isSearching
                 ? 'Fetching tracks across media sources'
                 : `${results.length} ${results.length === 1 ? 'song' : 'songs'}`}

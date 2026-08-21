@@ -91,7 +91,7 @@ export default function PlaylistDetail({
 
   return (
     <div className="animate-rise-in">
-      <section className="relative overflow-hidden px-1 pb-6 pt-2 sm:px-0 sm:pb-8 sm:pt-4">
+      <section className="relative overflow-hidden px-4 pb-6 pt-2 sm:px-5 sm:pb-8 sm:pt-4 lg:px-6">
         <div
           className="pointer-events-none absolute inset-0 -mx-3 sm:-mx-6 lg:-mx-8"
           style={{
@@ -102,17 +102,18 @@ export default function PlaylistDetail({
               : `linear-gradient(135deg, rgba(56,189,248,0.28) 0%, rgba(15,20,26,0.95) 45%, var(--bg) 100%)`,
           }}
         />
-        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-7">
-          <button
-            type="button"
-            onClick={onBack}
-            className="absolute left-0 top-0 z-10 inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-ink-300 transition hover:bg-white/10 hover:text-mist sm:static sm:mb-auto"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            All playlists
-          </button>
 
-          <div className="mx-auto mt-8 flex h-44 w-44 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-signal/80 via-ink-700 to-ember/50 shadow-[0_20px_50px_rgba(0,0,0,0.55)] sm:mx-0 sm:mt-0 sm:h-52 sm:w-52 lg:h-56 lg:w-56">
+        <button
+          type="button"
+          onClick={onBack}
+          className="relative z-10 mb-4 inline-flex items-center gap-1.5 rounded-lg px-1 py-1 text-xs font-sans text-ink-300 transition hover:bg-white/10 hover:text-mist sm:mb-5"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          All playlists
+        </button>
+
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-7">
+          <div className="mx-auto flex h-40 w-40 shrink-0 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br from-signal/80 via-ink-700 to-ember/50 shadow-[0_20px_50px_rgba(0,0,0,0.55)] sm:mx-0 sm:h-48 sm:w-48 lg:h-52 lg:w-52">
             {cover ? (
               <img src={cover} alt="" className="h-full w-full object-cover" />
             ) : (
@@ -121,14 +122,14 @@ export default function PlaylistDetail({
           </div>
 
           <div className="min-w-0 flex-1 pb-1 text-center sm:text-left">
-            <p className="text-xs font-semibold uppercase tracking-wide text-mist">Playlist</p>
-            <h1 className="mt-1 font-display text-4xl font-extrabold leading-none tracking-tight text-mist sm:text-5xl lg:text-6xl">
+            <p className="font-sans text-xs font-semibold uppercase tracking-wide text-mist">Playlist</p>
+            <h1 className="mt-1 font-sans text-3xl font-extrabold leading-none tracking-tight text-mist sm:text-5xl lg:text-6xl">
               {playlist.name}
             </h1>
             {playlist.description ? (
-              <p className="mt-3 line-clamp-2 text-sm text-ink-300">{playlist.description}</p>
+              <p className="mt-3 line-clamp-2 font-sans text-sm text-ink-300">{playlist.description}</p>
             ) : null}
-            <p className="mt-3 text-sm text-ink-200">
+            <p className="mt-3 font-sans text-sm text-ink-200">
               <span className="font-semibold text-mist">{user?.name || 'You'}</span>
               <span className="text-ink-400">
                 {' '}
